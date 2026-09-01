@@ -1,0 +1,15 @@
+version: 1
+
+mode: authorized-lab-only
+
+targets: []
+
+blocked_networks:
+  - "127.0.0.0/8"
+  - "169.254.0.0/16"
+
+host_access:
+  allowed: false
+
+internet_access:
+  allowed: false

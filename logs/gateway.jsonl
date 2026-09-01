@@ -1,0 +1,16 @@
+{"timestamp": 1788277103.4984517, "event": "command_requested", "command": ["whoami"]}
+{"timestamp": 1788277103.5036168, "event": "command_denied", "error": "[Errno 2] No such file or directory: '/workspace'"}
+{"timestamp": 1788277109.673923, "event": "command_requested", "command": ["pwd"]}
+{"timestamp": 1788277109.6746178, "event": "command_denied", "error": "[Errno 2] No such file or directory: '/workspace'"}
+{"timestamp": 1788277117.5426028, "event": "command_requested", "command": ["ls"]}
+{"timestamp": 1788277117.5433462, "event": "command_denied", "error": "[Errno 2] No such file or directory: '/workspace'"}
+{"timestamp": 1788277122.168997, "event": "command_denied", "error": "Command 'bash' is not currently allowed"}
+{"timestamp": 1788277128.0469952, "event": "command_denied", "error": "Command 'sudo' is not currently allowed"}
+{"timestamp": 1788277566.348935, "event": "request", "command": ["whoami"], "allowed": true, "reason": "allowed"}
+{"timestamp": 1788277566.7709458, "event": "result", "allowed": true, "container": "koth-job-1875dda5da9a", "command": ["whoami"], "return_code": 0, "stdout": "runner\n", "stderr": ""}
+{"timestamp": 1788277574.7322848, "event": "request", "command": ["pwd"], "allowed": true, "reason": "allowed"}
+{"timestamp": 1788277575.0073864, "event": "result", "allowed": true, "container": "koth-job-7161355928f6", "command": ["pwd"], "return_code": 0, "stdout": "/workspace\n", "stderr": ""}
+{"timestamp": 1788277580.9847603, "event": "request", "command": ["bash"], "allowed": false, "reason": "Program 'bash' is not allowed"}
+{"timestamp": 1788277621.084328, "event": "request", "command": ["sh", "-c", "whoami"], "allowed": false, "reason": "Program 'sh' is not allowed"}
+{"timestamp": 1788277621.0846562, "event": "request", "command": ["sudo", "id"], "allowed": false, "reason": "Program 'sudo' is not allowed"}
+{"timestamp": 1788277621.084792, "event": "request", "command": ["su", "root"], "allowed": false, "reason": "Program 'su' is not allowed"}

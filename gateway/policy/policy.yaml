@@ -1,0 +1,33 @@
+version: 1
+
+execution:
+  enabled: true
+  default_timeout_seconds: 30
+  max_timeout_seconds: 120
+
+scope:
+  require_allowlisted_target: true
+  allow_host_access: false
+  allow_internet: false
+
+filesystem:
+  allowed_roots:
+    - /workspace
+
+  denied_roots:
+    - /etc
+    - /root
+    - /home
+    - /proc
+    - /sys
+    - /dev
+
+docker:
+  allow_socket: false
+  privileged: false
+  capabilities: []
+
+audit:
+  enabled: true
+  log_directory: logs
+  evidence_directory: evidence
