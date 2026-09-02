@@ -34,7 +34,6 @@ try:
 except ImportError:
     HAVE_YAML = False
 
-from agents.recon.tools import ExecutionAdapter
 from core.evidence import EvidenceCollector, EvidenceRecord, SecurityError
 from core.schemas import SafeTest, TestResult, TestStatus, ValidationError
 from core.session import ApproachAlreadyFailedError, Session
@@ -55,7 +54,7 @@ class UnregisteredTargetError(GatewaySecurityError):
     pass
 
 
-class DisabledTargetError(GatewaySecurityError):
+class DisabledTargetError(UnregisteredTargetError):
     """Raised when an action is attempted on a disabled target."""
     pass
 
@@ -448,7 +447,7 @@ class GatewayOrchestrator:
         }
 
 
-class OrchestratedExecutionAdapter(ExecutionAdapter):
+class OrchestratedExecutionAdapter:
     """Adapter bridging ReconAgent tool execution to GatewayOrchestrator."""
 
     def __init__(self, orchestrator: GatewayOrchestrator):

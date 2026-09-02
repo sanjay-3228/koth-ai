@@ -47,14 +47,9 @@ from .tools import (
 )
 
 
-class ReconError(Exception):
-    """Base exception for reconnaissance agent errors."""
-    pass
+from gateway.orchestrator import DisabledTargetError, GatewaySecurityError, UnregisteredTargetError
 
-
-class UnregisteredTargetError(ReconError, SecurityError):
-    """Raised when an action is attempted on an unregistered or unallowlisted target."""
-    pass
+ReconError = GatewaySecurityError
 
 
 class TargetRegistry:
@@ -93,19 +88,19 @@ class TargetRegistry:
             cfg_data = self._parse_yaml_file(self.config_path)
             for t in cfg_data.get("targets", []):
                 t_id = t.get("id")
-                if t_id and t.get("enabled", False):
+                if t_id:
                     self.targets[t_id] = {
                         "id": t_id,
                         "container": t.get("container", f"koth-{t_id}"),
                         "protocol": t.get("protocol", "http"),
                         "port": int(t.get("port", 8080)),
-                        "enabled": True,
+                        "enabled": t.get("enabled", False),
                         "network": cfg_data.get("network", "koth-lab"),
                         "ip": t.get("ip"),
                     }
 
     def get_target(self, target_id: str) -> Dict[str, Any]:
-        """Retrieve authorized target or raise UnregisteredTargetError."""
+        """Retrieve authorized target or raise UnregisteredTargetError / DisabledTargetError."""
         if not target_id or not isinstance(target_id, str):
             raise UnregisteredTargetError("Target ID must be a non-empty string")
 
@@ -116,7 +111,7 @@ class TargetRegistry:
 
         target = self.targets[target_id]
         if not target.get("enabled", False):
-            raise UnregisteredTargetError(f"Target '{target_id}' is disabled in targets registry")
+            raise DisabledTargetError(f"Target '{target_id}' is disabled in targets registry")
 
         return dict(target)
 

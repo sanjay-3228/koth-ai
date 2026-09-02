@@ -101,7 +101,7 @@ class ReconPlanner:
                     }
 
         # Case 2: robots.txt crawling restrictions
-        if facts["root_observed"] and not facts["robots_observed"]:
+        if (facts["root_observed"] or "/" in facts["failed_paths"]) and not facts["robots_observed"]:
             robots_claim = "Target HTTP service exposes /robots.txt with crawling guidelines and path definitions"
             if (
                 robots_claim not in existing_claims

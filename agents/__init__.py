@@ -1,5 +1,6 @@
 """Agent architecture for KOTH AI."""
 
+from .controller import ControllerError, ResearchController, ResearchLimits, ResearchRunSummary
 from .recon import (
     ArbitraryCommandError,
     BaseTool,
@@ -19,6 +20,10 @@ from .recon import (
 )
 
 __all__ = [
+    "ResearchController",
+    "ResearchLimits",
+    "ResearchRunSummary",
+    "ControllerError",
     "ReconAgent",
     "ReconPlanner",
     "TargetRegistry",
