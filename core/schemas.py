@@ -11,11 +11,16 @@ from datetime import datetime, timezone
 from enum import Enum
 import json
 import re
-from typing import Any, Dict, List, Optional, Self
+from typing import Any, Dict, List, Optional, Self, Set, Union
 
 
 class ValidationError(ValueError):
     """Raised when schema validation fails."""
+    pass
+
+
+class InvalidStateTransitionError(ValidationError):
+    """Raised when an illegal hypothesis state transition is attempted."""
     pass
 
 
@@ -25,6 +30,15 @@ class HypothesisStatus(str, Enum):
     VALIDATED = "validated"
     REFUTED = "refuted"
     ABANDONED = "abandoned"
+
+
+VALID_HYPOTHESIS_TRANSITIONS: Dict[HypothesisStatus, Set[HypothesisStatus]] = {
+    HypothesisStatus.PROPOSED: {HypothesisStatus.TESTING, HypothesisStatus.ABANDONED},
+    HypothesisStatus.TESTING: {HypothesisStatus.VALIDATED, HypothesisStatus.REFUTED, HypothesisStatus.ABANDONED},
+    HypothesisStatus.VALIDATED: set(),
+    HypothesisStatus.REFUTED: set(),
+    HypothesisStatus.ABANDONED: set(),
+}
 
 
 class TestStatus(str, Enum):
@@ -170,6 +184,41 @@ class Hypothesis:
         valid_statuses = {s.value for s in HypothesisStatus}
         if self.status not in valid_statuses:
             raise ValidationError(f"Invalid status '{self.status}'. Expected one of {valid_statuses}")
+
+    def can_transition_to(self, target_status: Union[str, HypothesisStatus]) -> bool:
+        if isinstance(target_status, str):
+            try:
+                target = HypothesisStatus(target_status)
+            except ValueError:
+                return False
+        else:
+            target = target_status
+        try:
+            current = HypothesisStatus(self.status)
+        except ValueError:
+            return False
+        return target in VALID_HYPOTHESIS_TRANSITIONS.get(current, set())
+
+    def transition_to(self, target_status: Union[str, HypothesisStatus]) -> None:
+        if isinstance(target_status, str):
+            try:
+                target = HypothesisStatus(target_status)
+            except ValueError as exc:
+                raise ValidationError(f"Invalid hypothesis status: '{target_status}'") from exc
+        else:
+            target = target_status
+
+        try:
+            current = HypothesisStatus(self.status)
+        except ValueError as exc:
+            raise ValidationError(f"Invalid current hypothesis status: '{self.status}'") from exc
+
+        if not self.can_transition_to(target):
+            raise InvalidStateTransitionError(
+                f"Illegal hypothesis state transition from '{current.value}' to '{target.value}'"
+            )
+        self.status = target.value
+        self.updated_at = _current_iso_utc()
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -340,3 +389,53 @@ class Finding:
             remediation=data.get("remediation", ""),
             timestamp=data.get("timestamp", _current_iso_utc()),
         )
+
+
+@dataclass
+class FailedApproach:
+    """Reusable negative knowledge about a failed test or approach to prevent repetition."""
+    approach_id: str
+    hypothesis_id: str
+    test_id: str
+    target: str
+    tool: str
+    parameters: Dict[str, Any]
+    reason: str
+    negative_knowledge: str
+    evidence_ref: Optional[str] = None
+    timestamp: str = field(default_factory=_current_iso_utc)
+
+    def __post_init__(self):
+        self.approach_id = _validate_safe_identifier(self.approach_id, "approach_id")
+        self.hypothesis_id = _validate_safe_identifier(self.hypothesis_id, "hypothesis_id")
+        self.test_id = _validate_safe_identifier(self.test_id, "test_id")
+        self.target = _validate_safe_identifier(self.target, "target")
+        self.tool = _validate_safe_identifier(self.tool, "tool")
+        if not isinstance(self.parameters, dict):
+            raise ValidationError("Field 'parameters' must be a dictionary")
+        self.reason = _validate_non_empty_str(self.reason, "reason")
+        self.negative_knowledge = _validate_non_empty_str(self.negative_knowledge, "negative_knowledge")
+        if self.evidence_ref is not None:
+            self.evidence_ref = _validate_safe_identifier(self.evidence_ref, "evidence_ref")
+            if not re.fullmatch(r"^[0-9a-f]{64}$", self.evidence_ref):
+                raise ValidationError("Field 'evidence_ref' must be a 64-character lowercase hex SHA-256 hash")
+        self.timestamp = _validate_non_empty_str(self.timestamp, "timestamp")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> Self:
+        return cls(
+            approach_id=data["approach_id"],
+            hypothesis_id=data["hypothesis_id"],
+            test_id=data["test_id"],
+            target=data["target"],
+            tool=data["tool"],
+            parameters=data.get("parameters", {}),
+            reason=data["reason"],
+            negative_knowledge=data["negative_knowledge"],
+            evidence_ref=data.get("evidence_ref"),
+            timestamp=data.get("timestamp", _current_iso_utc()),
+        )
+

@@ -4,10 +4,12 @@ from .schemas import (
     Conclusion,
     ConclusionStatus,
     EvidenceRecord,
+    FailedApproach,
     Finding,
     FindingSeverity,
     Hypothesis,
     HypothesisStatus,
+    InvalidStateTransitionError,
     Observation,
     SafeTest,
     TestResult,
@@ -22,12 +24,21 @@ from .evidence import (
     canonicalize_json,
     compute_hash,
 )
+from .session import (
+    ApproachAlreadyFailedError,
+    Session,
+    SessionError,
+    SessionManager,
+    SessionSecurityError,
+    SessionValidationError,
+)
 
 __all__ = [
     "EvidenceRecord",
     "Observation",
     "Hypothesis",
     "HypothesisStatus",
+    "InvalidStateTransitionError",
     "SafeTest",
     "TestResult",
     "TestStatus",
@@ -35,6 +46,7 @@ __all__ = [
     "ConclusionStatus",
     "Finding",
     "FindingSeverity",
+    "FailedApproach",
     "ValidationError",
     "EvidenceCollector",
     "EvidenceError",
@@ -42,4 +54,10 @@ __all__ = [
     "SecurityError",
     "canonicalize_json",
     "compute_hash",
+    "Session",
+    "SessionManager",
+    "SessionError",
+    "SessionSecurityError",
+    "SessionValidationError",
+    "ApproachAlreadyFailedError",
 ]
