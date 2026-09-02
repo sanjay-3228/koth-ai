@@ -306,9 +306,13 @@ class GeminiProposalValidator:
 
     FORBIDDEN_PARAMETER_KEYS = {
         "ip",
+        "target_ip",
         "host",
         "hostname",
         "port",
+        "network",
+        "net",
+        "subnet",
         "cmd",
         "command",
         "shell",

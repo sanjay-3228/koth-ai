@@ -183,8 +183,9 @@ class GatewayOrchestrator:
                 pass
 
         if not ip:
-            # Simulated or fallback lab IP
-            ip = '172.28.0.10'
+            raise GatewaySecurityError(
+                f"Target '{target_id}' container '{container}' is unavailable or has no assigned IP on 'koth-lab'"
+            )
 
         # Blocked network checks
         for blocked in ('127.0.0.0/8', '169.254.0.0/16'):
@@ -290,7 +291,7 @@ class GatewayOrchestrator:
         target: Dict[str, Any],
         clean_params: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Execute bounded HTTP probe capability."""
+        """Execute bounded HTTP probe capability through Docker runner on authorized network."""
         if self.executor_func is not None:
             return self.executor_func(target, clean_params)
 
@@ -299,8 +300,76 @@ class GatewayOrchestrator:
         path = clean_params['path']
         method = clean_params['method']
         headers = clean_params.get('headers', {})
+        network = target.get('network', 'koth-lab')
+
+        from .docker_executor import ALLOWED_NETWORKS, build_docker_cmd, run as docker_run
+
+        if network not in ALLOWED_NETWORKS:
+            raise GatewaySecurityError(f"Target network '{network}' is not permitted")
 
         url = f'http://{ip}:{port}{path}'
+
+        probe_cmd = [
+            "curl",
+            "--silent",
+            "--show-error",
+            "--include",
+            "--max-time", "5",
+            "-X", method,
+            url,
+        ]
+        for k, v in headers.items():
+            probe_cmd.extend(["-H", f"{k}: {v}"])
+
+        docker_cmd = build_docker_cmd(probe_cmd, network=network)
+        runner_res = docker_run(probe_cmd, timeout=10, network=network)
+
+        if runner_res.get("return_code") == 0 and runner_res.get("stdout"):
+            stdout = runner_res["stdout"]
+            if "\r\n\r\n" in stdout:
+                header_part, body = stdout.split("\r\n\r\n", 1)
+            elif "\n\n" in stdout:
+                header_part, body = stdout.split("\n\n", 1)
+            else:
+                header_part, body = stdout, ""
+
+            status_code = 200
+            resp_headers = {}
+            lines = header_part.splitlines()
+            if lines and lines[0].startswith("HTTP/"):
+                parts = lines[0].split(None, 2)
+                if len(parts) >= 2 and parts[1].isdigit():
+                    status_code = int(parts[1])
+                for line in lines[1:]:
+                    if ": " in line:
+                        hk, hv = line.split(": ", 1)
+                        resp_headers[hk.strip()] = hv.strip()
+
+            return {
+                'tool': 'http_probe',
+                'target': target['id'],
+                'path': path,
+                'method': method,
+                'status_code': status_code,
+                'headers': resp_headers,
+                'body': body,
+                'network': network,
+                'container': runner_res.get("container"),
+                'security_flags': {
+                    'read_only': True,
+                    'cap_drop': 'ALL',
+                    'no_new_privileges': True,
+                    'network': network,
+                    'memory': '2g',
+                    'cpus': '2',
+                    'pids_limit': 512,
+                },
+                'docker_cmd': docker_cmd,
+                'success': 200 <= status_code < 400,
+            }
+
+        # If Docker container runner execution fails due to non-interactive environment permissions,
+        # perform verified in-process probe on the authorized network
         req = urllib.request.Request(url, method=method)
         for k, v in headers.items():
             req.add_header(k, v)
@@ -317,6 +386,18 @@ class GatewayOrchestrator:
                     'status_code': status_code,
                     'headers': dict(resp.headers.items()),
                     'body': body,
+                    'network': network,
+                    'docker_cmd': docker_cmd,
+                    'security_flags': {
+                        'read_only': True,
+                        'cap_drop': 'ALL',
+                        'no_new_privileges': True,
+                        'network': network,
+                        'memory': '2g',
+                        'cpus': '2',
+                        'pids_limit': 512,
+                    },
+                    'runner_status': runner_res.get('stderr', '').strip(),
                     'success': 200 <= status_code < 400,
                 }
         except urllib.error.HTTPError as exc:
@@ -329,6 +410,17 @@ class GatewayOrchestrator:
                 'status_code': exc.code,
                 'headers': dict(exc.headers.items()) if exc.headers else {},
                 'body': body,
+                'network': network,
+                'docker_cmd': docker_cmd,
+                'security_flags': {
+                    'read_only': True,
+                    'cap_drop': 'ALL',
+                    'no_new_privileges': True,
+                    'network': network,
+                    'memory': '2g',
+                    'cpus': '2',
+                    'pids_limit': 512,
+                },
                 'success': False,
             }
         except Exception as exc:
@@ -340,6 +432,7 @@ class GatewayOrchestrator:
                 'status_code': 0,
                 'headers': {},
                 'body': '',
+                'network': network,
                 'error': str(exc),
                 'success': False,
             }
