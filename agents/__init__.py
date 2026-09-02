@@ -1,6 +1,17 @@
 """Agent architecture for KOTH AI."""
 
 from .controller import ControllerError, ResearchController, ResearchLimits, ResearchRunSummary
+from .gemini_adapter import (
+    GeminiAdapterError,
+    GeminiAPIError,
+    GeminiClient,
+    GeminiContextBuilder,
+    GeminiProposal,
+    GeminiProposalType,
+    GeminiProposalValidationError,
+    GeminiReasoningAdapter,
+    GeminiResponseParsingError,
+)
 from .recon import (
     ArbitraryCommandError,
     BaseTool,
@@ -24,6 +35,15 @@ __all__ = [
     "ResearchLimits",
     "ResearchRunSummary",
     "ControllerError",
+    "GeminiReasoningAdapter",
+    "GeminiProposal",
+    "GeminiProposalType",
+    "GeminiContextBuilder",
+    "GeminiClient",
+    "GeminiAdapterError",
+    "GeminiAPIError",
+    "GeminiResponseParsingError",
+    "GeminiProposalValidationError",
     "ReconAgent",
     "ReconPlanner",
     "TargetRegistry",
