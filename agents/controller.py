@@ -53,6 +53,12 @@ from gateway.orchestrator import (
     UnregisteredTargetError,
     execute_safe_test,
 )
+from .gemini_adapter import (
+    GeminiAdapterError,
+    GeminiProposal,
+    GeminiProposalType,
+    GeminiReasoningAdapter,
+)
 from .recon.agent import TargetRegistry
 from .recon.planner import ReconPlanner
 
@@ -130,7 +136,9 @@ class ResearchController:
         orchestrator: Optional[GatewayOrchestrator] = None,
         target_registry: Optional[TargetRegistry] = None,
         evidence_collector: Optional[EvidenceCollector] = None,
-        planner: Optional[ReconPlanner] = None,
+        planner: Optional[Any] = None,
+        reasoning_adapter: Optional[GeminiReasoningAdapter] = None,
+        fallback_planner: Optional[ReconPlanner] = None,
     ):
         base_dir = Path.home() / "koth-ai"
         self.evidence_collector = evidence_collector or EvidenceCollector(evidence_dir=evidence_dir)
@@ -149,7 +157,14 @@ class ResearchController:
             evidence_collector=self.evidence_collector,
             audit_log_path=audit_log_path,
         )
-        self.planner = planner or ReconPlanner()
+        self.fallback_planner = fallback_planner or (planner if isinstance(planner, ReconPlanner) else None) or ReconPlanner()
+        if reasoning_adapter is not None:
+            self.reasoning_adapter = reasoning_adapter
+        elif isinstance(planner, GeminiReasoningAdapter):
+            self.reasoning_adapter = planner
+        else:
+            self.reasoning_adapter = None
+        self.planner = self.fallback_planner
         self.audit_log_path = Path(audit_log_path or (base_dir / "logs" / "controller.jsonl")).resolve()
         self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -296,43 +311,97 @@ class ResearchController:
                     })
                     raise UnauthorizedToolError(f"Tool '{tool_name}' is not permitted by controller limits: {limits.allowed_tools}")
             else:
-                # Step A: Find or propose hypothesis
+                # Step A & B: Determine hypothesis and safe test plan
+                test_plan = None
                 active_hyp = next(
                     (h for h in active_session.hypotheses if h.status in (HypothesisStatus.PROPOSED.value, HypothesisStatus.TESTING.value)),
                     None,
                 )
 
-                target_path_hint = None
-                if not active_hyp:
-                    prop = self.planner.propose_hypothesis(active_session, target_info)
-                    if not prop:
-                        stop_reason = "no_more_hypotheses"
-                        break
+                # Attempt Gemini reasoning if available
+                used_gemini = False
+                if self.reasoning_adapter:
+                    try:
+                        proposal = self.reasoning_adapter.generate_proposal(
+                            session=active_session,
+                            target_info=target_info,
+                            allowed_tools=limits.allowed_tools,
+                            max_tests_remaining=limits.max_tests - (tests_executed + tests_rejected),
+                        )
+                        if proposal.is_conclusion():
+                            self._audit_action({
+                                "session_id": sess_id,
+                                "target_id": active_target_id,
+                                "action": "gemini_concluded",
+                                "reasoning": proposal.reasoning,
+                            })
+                            stop_reason = "concluded_by_reasoning"
+                            break
 
-                    hyp_id = f"hyp-{active_target_id}-{step_index:03d}"
-                    active_hyp = active_session.add_hypothesis(
-                        hypothesis_id=hyp_id,
-                        based_on_observations=prop["based_on_observations"],
-                        claim=prop["claim"],
+                        if proposal.proposal_type == GeminiProposalType.NEW_HYPOTHESIS_AND_TEST.value:
+                            hyp_id = f"hyp-{active_target_id}-{step_index:03d}"
+                            active_hyp = active_session.add_hypothesis(
+                                hypothesis_id=hyp_id,
+                                based_on_observations=proposal.based_on_observations,
+                                claim=proposal.hypothesis_claim,
+                            )
+                            test_plan = {
+                                "tool": proposal.tool,
+                                "safety_justification": proposal.safety_justification,
+                                "expected_outcome": proposal.expected_outcome,
+                                "parameters": proposal.parameters,
+                            }
+                            used_gemini = True
+                        elif proposal.proposal_type == GeminiProposalType.TEST_EXISTING_HYPOTHESIS.value:
+                            active_hyp = active_session.get_hypothesis(proposal.hypothesis_id)
+                            test_plan = {
+                                "tool": proposal.tool,
+                                "safety_justification": proposal.safety_justification,
+                                "expected_outcome": proposal.expected_outcome,
+                                "parameters": proposal.parameters,
+                            }
+                            used_gemini = True
+                    except Exception as exc:
+                        self._audit_action({
+                            "session_id": sess_id,
+                            "target_id": active_target_id,
+                            "action": "gemini_reasoning_fallback",
+                            "error": str(exc),
+                        })
+                        used_gemini = False
+
+                # Deterministic fallback if Gemini was not used or failed
+                if not used_gemini or not test_plan:
+                    target_path_hint = None
+                    if not active_hyp:
+                        prop = self.fallback_planner.propose_hypothesis(active_session, target_info)
+                        if not prop:
+                            stop_reason = "no_more_hypotheses"
+                            break
+
+                        hyp_id = f"hyp-{active_target_id}-{step_index:03d}"
+                        active_hyp = active_session.add_hypothesis(
+                            hypothesis_id=hyp_id,
+                            based_on_observations=prop["based_on_observations"],
+                            claim=prop["claim"],
+                        )
+                        target_path_hint = prop.get("target_path")
+
+                    test_plan = self.fallback_planner.propose_safe_test(
+                        session=active_session,
+                        hypothesis=active_hyp,
+                        target_info=target_info,
+                        target_path=target_path_hint,
                     )
-                    target_path_hint = prop.get("target_path")
 
-                # Step B: Propose safe test
-                test_plan = self.planner.propose_safe_test(
-                    session=active_session,
-                    hypothesis=active_hyp,
-                    target_info=target_info,
-                    target_path=target_path_hint,
-                )
-
-                if not test_plan:
-                    if active_hyp.status in (HypothesisStatus.PROPOSED.value, HypothesisStatus.TESTING.value):
-                        active_session.transition_hypothesis(active_hyp.hypothesis_id, HypothesisStatus.ABANDONED)
-                    prop_check = self.planner.propose_hypothesis(active_session, target_info)
-                    if not prop_check:
-                        stop_reason = "no_more_hypotheses"
-                        break
-                    continue
+                    if not test_plan:
+                        if active_hyp.status in (HypothesisStatus.PROPOSED.value, HypothesisStatus.TESTING.value):
+                            active_session.transition_hypothesis(active_hyp.hypothesis_id, HypothesisStatus.ABANDONED)
+                        prop_check = self.fallback_planner.propose_hypothesis(active_session, target_info)
+                        if not prop_check:
+                            stop_reason = "no_more_hypotheses"
+                            break
+                        continue
 
                 # Step C: Tool limit check
                 tool_name = test_plan["tool"]
@@ -358,7 +427,7 @@ class ResearchController:
                     })
                     if active_hyp.status in (HypothesisStatus.PROPOSED.value, HypothesisStatus.TESTING.value):
                         active_session.transition_hypothesis(active_hyp.hypothesis_id, HypothesisStatus.ABANDONED)
-                    prop_check = self.planner.propose_hypothesis(active_session, target_info)
+                    prop_check = self.fallback_planner.propose_hypothesis(active_session, target_info)
                     if not prop_check:
                         stop_reason = "no_more_hypotheses"
                         break
@@ -395,7 +464,7 @@ class ResearchController:
                 })
                 if active_hyp.status in (HypothesisStatus.PROPOSED.value, HypothesisStatus.TESTING.value):
                     active_session.transition_hypothesis(active_hyp.hypothesis_id, HypothesisStatus.ABANDONED)
-                prop_check = self.planner.propose_hypothesis(active_session, target_info)
+                prop_check = self.fallback_planner.propose_hypothesis(active_session, target_info)
                 if not prop_check:
                     stop_reason = "no_more_hypotheses"
                     break
@@ -415,12 +484,31 @@ class ResearchController:
 
             # Step G: Evaluate Result and add Conclusion
             test_res = orch_res["test_result"]
-            eval_outcome = self.planner.evaluate_result(
-                session=active_session,
-                safe_test=safe_test,
-                test_result=test_res,
-                evidence_payload=orch_res["execution_output"],
-            )
+            eval_outcome = None
+            if self.reasoning_adapter:
+                try:
+                    eval_outcome = self.reasoning_adapter.evaluate_result(
+                        session=active_session,
+                        safe_test=safe_test,
+                        test_result=test_res,
+                        evidence_payload=orch_res["execution_output"],
+                    )
+                except Exception as exc:
+                    self._audit_action({
+                        "session_id": sess_id,
+                        "target_id": active_target_id,
+                        "action": "evaluation_fallback",
+                        "error": str(exc),
+                    })
+                    eval_outcome = None
+
+            if not eval_outcome:
+                eval_outcome = self.fallback_planner.evaluate_result(
+                    session=active_session,
+                    safe_test=safe_test,
+                    test_result=test_res,
+                    evidence_payload=orch_res["execution_output"],
+                )
 
             concl_id = f"concl-{active_target_id}-{step_index:03d}"
             active_session.add_conclusion(

@@ -160,7 +160,7 @@ class GeminiContextBuilder:
         # 4. Previous SafeTests and TestResults with immutable evidence references
         test_history = []
         for test in session.safe_tests:
-            result = session.get_test_result_for_test(test.test_id)
+            result = next((r for r in session.test_results if r.test_id == test.test_id), None)
             test_history.append({
                 "test_id": test.test_id,
                 "hypothesis_id": test.hypothesis_id,
