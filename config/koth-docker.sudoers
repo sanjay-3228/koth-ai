@@ -1,2 +1,0 @@
-# Scoped non-interactive Docker operations for KOTH AI Gateway
-bipin ALL=(root) NOPASSWD: /usr/bin/docker inspect koth-target-01, /usr/bin/docker network inspect koth-lab, /usr/bin/docker network create --internal --subnet=172.28.0.0/16 koth-lab
