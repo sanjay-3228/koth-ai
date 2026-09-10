@@ -1,0 +1,41 @@
+{
+  "flash_normal_tactical": {
+    "action_type": "attack",
+    "target": "198.51.100.10:8080",
+    "priority": "high",
+    "reasoning": "Target competitor web service port 8080 to disrupt their ranking.",
+    "confidence": 0.88
+  },
+  "flash_low_confidence": {
+    "action_type": "defend",
+    "target": "10.0.1.5:80",
+    "priority": "normal",
+    "reasoning": "Uncertain about service health; confidence below threshold.",
+    "confidence": 0.45
+  },
+  "pro_deep_reasoning": {
+    "action_type": "defend",
+    "target": "10.0.1.5:80",
+    "priority": "critical",
+    "reasoning": "Escalated deep analysis: Multiple services under load and competitor score closing rapidly. Prioritize immediate web recovery.",
+    "confidence": 0.94
+  },
+  "unauthorized_target": {
+    "action_type": "attack",
+    "target": "8.8.8.8:53",
+    "priority": "critical",
+    "reasoning": "Model hallucinates non-competition target.",
+    "confidence": 0.9
+  },
+  "unauthorized_service": {
+    "action_type": "defend",
+    "target": "10.0.99.99:9999",
+    "priority": "high",
+    "reasoning": "Model attempts to defend unconfigured host.",
+    "confidence": 0.85
+  },
+  "malformed_json": "INVALID_JSON_RESPONSE{{{",
+  "flash_timeout_error": {
+    "error": "DeadlineExceeded: request timed out after 10000ms"
+  }
+}

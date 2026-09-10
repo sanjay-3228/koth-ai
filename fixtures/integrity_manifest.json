@@ -1,0 +1,14 @@
+{
+  "monitored_files": [
+    "/var/www/html/index.php",
+    "/etc/koth/config.conf"
+  ],
+  "clean_hashes": {
+    "/var/www/html/index.php": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/etc/koth/config.conf": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+  },
+  "tampered_hashes": {
+    "/var/www/html/index.php": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+    "/etc/koth/config.conf": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+  }
+}

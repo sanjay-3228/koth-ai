@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KOTH Agent // Tactical Operations Console</title>
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.85);
+      --bg-card-hover: rgba(24, 33, 53, 0.95);
+      --border-color: rgba(56, 189, 248, 0.15);
+      --border-highlight: rgba(56, 189, 248, 0.4);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-amber: #f59e0b;
+      --accent-purple: #a855f7;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      padding: 24px;
+      line-height: 1.5;
+      background-image:
+        radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
+    }
+
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Top Navigation Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 18px 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 20px;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+    }
+
+    .brand-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: linear-gradient(to right, #f1f5f9, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-text p {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--accent-green);
+    }
+
+    .status-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+    }
+
+    .btn {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: var(--accent-cyan);
+    }
+
+    /* KPI Stat Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .kpi-card:hover {
+      border-color: var(--border-highlight);
+      transform: translateY(-2px);
+    }
+
+    .kpi-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      letter-spacing: -0.03em;
+    }
+
+    .kpi-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Main Content Layout */
+    .content-layout {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 1024px) {
+      .content-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .panel-body {
+      padding: 0;
+      overflow-x: auto;
+    }
+
+    /* Modern Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    th {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 12px 16px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-up {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-down {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    /* Action Badges */
+    .badge-defend {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .badge-attack {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .badge-recon {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-hold {
+      background: rgba(148, 163, 184, 0.15);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    /* Model Badges */
+    .badge-flash {
+      background: rgba(6, 182, 212, 0.15);
+      color: #22d3ee;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .badge-pro {
+      background: rgba(168, 85, 247, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    .badge-local {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Priority Pills */
+    .priority-critical {
+      color: #ef4444;
+      font-weight: 700;
+    }
+
+    .priority-high {
+      color: #f97316;
+      font-weight: 600;
+    }
+
+    .priority-medium {
+      color: #eab308;
+    }
+
+    .priority-low {
+      color: #94a3b8;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .empty-state {
+      padding: 40px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Competitor Standings */
+    .competitor-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .competitor-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .competitor-score {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    /* Swarm Tactical Panel */
+    .swarm-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .swarm-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .swarm-title {
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .phase-badge {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.05em;
+    }
+    .phase-attack {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .phase-defense {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .phase-hold {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .agents-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      .agents-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 550px) {
+      .agents-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .agent-card {
+      background: rgba(17, 24, 39, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .agent-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .agent-id {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--accent-cyan);
+    }
+    .agent-target {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+    .kill-btn {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      transition: all 0.2s;
+    }
+    .kill-btn:hover {
+      background: rgba(239, 68, 68, 0.4);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="logo-badge">K</div>
+        <div class="brand-text">
+          <h1>KOTH Agent Tactical Console</h1>
+          <p id="agent-status-line">Multi-Tier Autonomous Routing: Gemini 3.8 Flash + Gemini 3.1 Pro Preview</p>
+        </div>
+      </div>
+      <div class="header-controls">
+        <div class="status-pill" id="live-indicator">
+          <div class="status-pulse"></div>
+          <span>MONITORING ACTIVE</span>
+        </div>
+        <button class="btn" id="refresh-btn" onclick="fetchStatus()">Refresh</button>
+      </div>
+    </header>
+
+    <!-- Top KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Score & Rank</span>
+          <span class="config-tag" id="kpi-rank-tag">Rank --</span>
+        </div>
+        <div class="kpi-value" id="kpi-score">--</div>
+        <div class="kpi-subtitle" id="kpi-score-sub">Awaiting scoreboard telemetry</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Current Model</span>
+          <span class="config-tag" id="kpi-model-tag">PRIMARY</span>
+        </div>
+        <div class="kpi-value" style="font-size: 20px;" id="kpi-current-model">nvidia/nemotron-3.5-lightning-30b-a3b</div>
+        <div class="kpi-subtitle" id="kpi-confidence-sub">Confidence: --</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Model Latency</span>
+          <span class="config-tag">Avg ms</span>
+        </div>
+        <div class="kpi-value" style="font-size: 22px;" id="kpi-latency">--</div>
+        <div class="kpi-subtitle" id="kpi-latency-sub">Flash: -- | Pro: --</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">
+          <span>Escalations & Actions</span>
+          <span class="config-tag" id="config-dryrun">DRY RUN</span>
+        </div>
+        <div class="kpi-value" id="kpi-escalations">0 Esc.</div>
+        <div class="kpi-subtitle" id="kpi-actions-sub">0 Total Decisions Logged</div>
+      </div>
+    </div>
+
+    <!-- Swarm Tactical Operations Panel -->
+    <div class="swarm-panel" id="swarm-panel">
+      <div class="swarm-header">
+        <div class="swarm-title">
+          <span>4-Agent Swarm // null_warriors</span>
+          <span class="phase-badge phase-hold" id="swarm-phase-badge">PHASE: HOLD</span>
+          <span class="config-tag" id="swarm-epoch-tag">Epoch --</span>
+          <span class="config-tag" id="swarm-round-tag">Round --</span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <span class="config-tag" id="swarm-leases-count">0 Active Leases</span>
+          <button class="kill-btn" id="swarm-kill-btn" onclick="triggerKillSwitch()">KILL SWITCH</button>
+        </div>
+      </div>
+
+      <!-- 4 Agent Cards Grid -->
+      <div class="agents-grid" id="swarm-agents-grid">
+        <div class="agent-card" id="card-agent-01">
+          <div class="agent-card-header">
+            <span class="agent-id">agent-01</span>
+            <span class="badge" id="status-agent-01">READY</span>
+          </div>
+          <div class="agent-target" id="target-agent-01">Target: (none)</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="task-agent-01">Task: idle</div>
+        </div>
+
+        <div class="agent-card" id="card-agent-02">
+          <div class="agent-card-header">
+            <span class="agent-id">agent-02</span>
+            <span class="badge" id="status-agent-02">READY</span>
+          </div>
+          <div class="agent-target" id="target-agent-02">Target: (none)</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="task-agent-02">Task: idle</div>
+        </div>
+
+        <div class="agent-card" id="card-agent-03">
+          <div class="agent-card-header">
+            <span class="agent-id">agent-03</span>
+            <span class="badge" id="status-agent-03">READY</span>
+          </div>
+          <div class="agent-target" id="target-agent-03">Target: (none)</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="task-agent-03">Task: idle</div>
+        </div>
+
+        <div class="agent-card" id="card-agent-04">
+          <div class="agent-card-header">
+            <span class="agent-id">agent-04</span>
+            <span class="badge" id="status-agent-04">READY</span>
+          </div>
+          <div class="agent-target" id="target-agent-04">Target: (none)</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="task-agent-04">Task: idle</div>
+        </div>
+      </div>
+
+      <!-- Task Queue Counters -->
+      <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); border-top: 1px solid var(--border-color); padding-top: 12px;">
+        <span>Tasks: <strong class="mono" id="tasks-total" style="color: var(--text-primary);">0</strong></span>
+        <span>Pending: <strong class="mono" id="tasks-pending" style="color: var(--accent-amber);">0</strong></span>
+        <span>Leased: <strong class="mono" id="tasks-leased" style="color: var(--accent-cyan);">0</strong></span>
+        <span>Completed: <strong class="mono" id="tasks-completed" style="color: var(--accent-green);">0</strong></span>
+        <span>Failed: <strong class="mono" id="tasks-failed" style="color: var(--accent-red);">0</strong></span>
+        <span>Cancelled: <strong class="mono" id="tasks-cancelled" style="color: var(--text-muted);">0</strong></span>
+      </div>
+    </div>
+
+    <!-- Main Content Layout -->
+    <div class="content-layout">
+      <!-- Left Column: Actions & Services -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Services Status Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Monitored Defense Services</div>
+            <span class="config-tag" id="services-count">0 Services</span>
+          </div>
+          <div class="panel-body">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service / Target</th>
+                  <th>Status</th>
+                  <th>Last Check</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="services-table-body">
+                <tr>
+                  <td colspan="4" class="empty-state">No services registered or received yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Actions / Tactical Log Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Tactical Decisions Feed (Last 20)</div>
+            <span class="config-tag">Model Routed</span>
+          </div>
+          <div class="panel-body">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Action</th>
+                  <th>Model</th>
+                  <th>Conf.</th>
+                  <th>Priority</th>
+                  <th>Target</th>
+                  <th>Strategic Reasoning</th>
+                </tr>
+              </thead>
+              <tbody id="actions-table-body">
+                <tr>
+                  <td colspan="7" class="empty-state">No actions logged yet. Agent will record decisions on tick.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Model Architecture, Competitor Standings & Config -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Model Architecture & Router Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Gemini Model Routing</div>
+            <span class="config-tag">Active</span>
+          </div>
+          <div class="panel-body" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">PRIMARY MODEL:</span>
+              <span class="mono" style="color: var(--accent-cyan);" id="meta-primary-model">nvidia/nemotron-3.5-lightning-30b-a3b</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">REASONING MODEL:</span>
+              <span class="mono" style="color: var(--accent-purple);" id="meta-reasoning-model">gemini-3.1-pro-preview</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">CURRENT MODEL:</span>
+              <span class="mono" style="font-weight: 700;" id="meta-current-model">nvidia/nemotron-3.5-lightning-30b-a3b</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">CONFIDENCE THRESHOLD:</span>
+              <span class="mono" id="meta-conf-threshold">0.75</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">LATEST CONFIDENCE:</span>
+              <span class="mono" id="meta-latest-confidence">--</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">ESCALATIONS (Flash -> Pro):</span>
+              <span class="mono" style="color: var(--accent-amber);" id="meta-escalation-count">0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">FALLBACK COUNT:</span>
+              <span class="mono" id="meta-fallback-count">0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">FLASH AVG LATENCY:</span>
+              <span class="mono" id="meta-flash-lat">--</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">PRO AVG LATENCY:</span>
+              <span class="mono" id="meta-pro-lat">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Competitor Standings -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Competitor Standings</div>
+            <span class="config-tag" id="competitors-count">0 Teams</span>
+          </div>
+          <div class="panel-body" id="competitors-list">
+            <div class="empty-state">No competitor telemetry available.</div>
+          </div>
+        </div>
+
+        <!-- Engine Telemetry / System Metadata -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">System Execution</div>
+          </div>
+          <div class="panel-body" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">Tick Interval:</span>
+              <span class="mono" id="meta-interval">--</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">Execution Mode:</span>
+              <span class="mono" id="meta-mode">--</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">Last Telemetry Sync:</span>
+              <span class="mono" id="meta-last-sync">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function formatTime(timestamp) {
+      if (!timestamp) return "--";
+      const d = new Date(timestamp * 1000);
+      return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function formatDate(timestamp) {
+      if (!timestamp) return "--";
+      const d = new Date(timestamp * 1000);
+      return d.toISOString().replace('T', ' ').substring(0, 19);
+    }
+
+    async function fetchStatus() {
+      try {
+        const resp = await fetch('/api/status');
+        if (!resp.ok) throw new Error('Network error ' + resp.status);
+        const data = await resp.json();
+        updateUI(data);
+
+        document.getElementById('live-indicator').innerHTML = `
+          <div class="status-pulse"></div>
+          <span>MONITORING ACTIVE</span>
+        `;
+        document.getElementById('live-indicator').style.borderColor = 'rgba(16, 185, 129, 0.3)';
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+        document.getElementById('live-indicator').innerHTML = `
+          <div class="status-pulse" style="background-color: var(--accent-red); box-shadow: 0 0 8px var(--accent-red);"></div>
+          <span>OFFLINE / RETRYING</span>
+        `;
+        document.getElementById('live-indicator').style.borderColor = 'rgba(239, 68, 68, 0.3)';
+      }
+    }
+
+    function updateUI(data) {
+      const tel = data.telemetry || {};
+      const actions = data.recent_actions || [];
+      const cfg = data.config || {};
+      const router = data.router_metrics || {};
+
+      // 1. KPI Cards
+      document.getElementById('kpi-score').textContent = (tel.our_score !== null && tel.our_score !== undefined) ? tel.our_score : "--";
+      document.getElementById('kpi-rank-tag').textContent = (tel.rank !== null && tel.rank !== undefined) ? ('Rank #' + tel.rank) : "Rank --";
+
+      const currentModel = router.current_model || cfg.primary_model || "nvidia/nemotron-3.5-lightning-30b-a3b";
+      document.getElementById('kpi-current-model').textContent = currentModel;
+      const confVal = (router.latest_confidence !== undefined && router.latest_confidence !== null)
+        ? Math.round(router.latest_confidence * 100) + "%"
+        : "--";
+      document.getElementById('kpi-confidence-sub').textContent = `Latest Confidence: ${confVal}`;
+
+      const flashLat = router.flash_latency_avg_ms ? router.flash_latency_avg_ms + "ms" : "--";
+      const proLat = router.pro_latency_avg_ms ? router.pro_latency_avg_ms + "ms" : "--";
+      document.getElementById('kpi-latency').textContent = flashLat;
+      document.getElementById('kpi-latency-sub').textContent = `Flash: ${flashLat} | Pro: ${proLat}`;
+
+      document.getElementById('kpi-escalations').textContent = `${router.escalation_count || 0} Esc.`;
+      document.getElementById('kpi-actions-sub').textContent = `${actions.length} Total Decisions Logged`;
+
+      // 2. Model Architecture Panel
+      document.getElementById('meta-primary-model').textContent = cfg.primary_model || "nvidia/nemotron-3.5-lightning-30b-a3b";
+      document.getElementById('meta-reasoning-model').textContent = cfg.reasoning_model || "gemini-3.1-pro-preview";
+      document.getElementById('meta-current-model').textContent = currentModel;
+      document.getElementById('meta-conf-threshold').textContent = cfg.confidence_threshold || "0.75";
+      document.getElementById('meta-latest-confidence').textContent = confVal;
+      document.getElementById('meta-escalation-count').textContent = router.escalation_count || 0;
+      document.getElementById('meta-fallback-count').textContent = router.fallback_count || 0;
+      document.getElementById('meta-flash-lat').textContent = flashLat;
+      document.getElementById('meta-pro-lat').textContent = proLat;
+
+      // 3. Execution & Metadata
+      if (cfg.dry_run !== undefined) {
+        const dryTag = document.getElementById('config-dryrun');
+        dryTag.textContent = cfg.dry_run ? "DRY-RUN (SIMULATED)" : "LIVE EXECUTION";
+        dryTag.style.color = cfg.dry_run ? "var(--accent-cyan)" : "var(--accent-red)";
+        document.getElementById('meta-mode').textContent = cfg.dry_run ? "Dry-Run (Simulated)" : "Live Execution";
+      }
+      if (cfg.tick_interval) {
+        document.getElementById('meta-interval').textContent = cfg.tick_interval + "s";
+      }
+      if (tel.timestamp) {
+        document.getElementById('meta-last-sync').textContent = formatTime(tel.timestamp);
+      }
+
+      // 4. Services Table
+      const services = tel.our_services || [];
+      document.getElementById('services-count').textContent = `${services.length} Services`;
+      const sBody = document.getElementById('services-table-body');
+      if (services.length === 0) {
+        sBody.innerHTML = `<tr><td colspan="4" class="empty-state">No monitored services reported yet.</td></tr>`;
+      } else {
+        sBody.innerHTML = services.map(s => `
+          <tr>
+            <td><strong class="mono">${s.host}:${s.port}</strong></td>
+            <td>
+              <span class="badge ${s.up ? 'badge-up' : 'badge-down'}">
+                ${s.up ? 'ONLINE' : 'DOWN'}
+              </span>
+            </td>
+            <td class="mono">${formatTime(s.last_checked)}</td>
+            <td style="color: var(--text-secondary);">${escapeHtml(s.note || '-')}</td>
+          </tr>
+        `).join('');
+      }
+
+      // 5. Competitor Standings
+      const competitors = tel.competitor_scores || {};
+      const compKeys = Object.keys(competitors);
+      document.getElementById('competitors-count').textContent = `${compKeys.length} Teams`;
+      const compContainer = document.getElementById('competitors-list');
+      if (compKeys.length === 0) {
+        compContainer.innerHTML = `<div class="empty-state">No competitor scores reported.</div>`;
+      } else {
+        const sorted = compKeys.map(k => ({ name: k, score: competitors[k] }))
+                               .sort((a, b) => b.score - a.score);
+        compContainer.innerHTML = sorted.map((c, idx) => `
+          <div class="competitor-item">
+            <div>
+              <span class="config-tag" style="margin-right: 8px;">#${idx + 1}</span>
+              <span class="competitor-name">${escapeHtml(c.name)}</span>
+            </div>
+            <span class="competitor-score">${c.score}</span>
+          </div>
+        `).join('');
+      }
+
+      // 6. Tactical Actions Table
+      const aBody = document.getElementById('actions-table-body');
+      if (actions.length === 0) {
+        aBody.innerHTML = `<tr><td colspan="7" class="empty-state">No actions logged yet. Agent will record decisions on tick.</td></tr>`;
+      } else {
+        aBody.innerHTML = actions.map(a => {
+          const actionType = (a.action_type || '').toLowerCase();
+          const priority = (a.priority || '').toLowerCase();
+          const modelUsed = a.model_used || 'nvidia/nemotron-3.5-lightning-30b-a3b';
+          let modelBadgeClass = 'badge-flash';
+          if (modelUsed.includes('pro')) modelBadgeClass = 'badge-pro';
+          else if (modelUsed.includes('local') || modelUsed.includes('fallback')) modelBadgeClass = 'badge-local';
+
+          const confDisplay = (a.confidence !== undefined && a.confidence !== null)
+            ? Math.round(a.confidence * 100) + '%'
+            : '-';
+
+          return `
+            <tr>
+              <td class="mono">${formatDate(a.timestamp)}</td>
+              <td><span class="badge badge-${actionType}">${actionType.toUpperCase()}</span></td>
+              <td><span class="badge ${modelBadgeClass}">${escapeHtml(modelUsed)}</span></td>
+              <td class="mono">${confDisplay}</td>
+              <td class="priority-${priority}">${priority.toUpperCase()}</td>
+              <td><strong class="mono">${escapeHtml(a.target || '(none)')}</strong></td>
+              <td style="color: var(--text-primary); max-width: 380px;">${escapeHtml(a.reasoning)}</td>
+            </tr>
+          `;
+      // 7. Swarm Panel Rendering
+      const swarm = data.swarm;
+      if (swarm) {
+        const phaseState = swarm.phase || {};
+        const phaseName = (phaseState.phase || 'HOLD').toUpperCase();
+        const badge = document.getElementById('swarm-phase-badge');
+        badge.textContent = `PHASE: ${phaseName}`;
+        badge.className = `phase-badge phase-${phaseName.toLowerCase()}`;
+
+        document.getElementById('swarm-epoch-tag').textContent = `Epoch #${phaseState.phase_epoch || 0}`;
+        document.getElementById('swarm-round-tag').textContent = `Round #${phaseState.round_id || 0}`;
+        document.getElementById('swarm-leases-count').textContent = `${swarm.active_leases_count || 0} Active Leases`;
+
+        // Dynamically update agents from configured authorized roster
+        const agents = swarm.agents || {};
+        const roster = swarm.authorized_agents || (Object.keys(agents).length > 0 ? Object.keys(agents) : ['agent-01', 'agent-02', 'agent-03', 'agent-04']);
+        const gridElem = document.getElementById('swarm-agents-grid');
+
+        roster.forEach(aid => {
+          let card = document.getElementById(`card-${aid}`);
+          if (!card && gridElem) {
+            card = document.createElement('div');
+            card.className = 'agent-card';
+            card.id = `card-${aid}`;
+            card.innerHTML = `
+              <div class="agent-card-header">
+                <span class="agent-id">${aid}</span>
+                <span class="badge" id="status-${aid}">READY</span>
+              </div>
+              <div class="agent-target" id="target-${aid}">Target: (none)</div>
+              <div style="font-size: 11px; color: var(--text-muted);" id="task-${aid}">Task: idle</div>
+            `;
+            gridElem.appendChild(card);
+          }
+
+          const info = agents[aid] || {};
+          const alive = info.alive;
+          const hb = info.heartbeat || {};
+          const statusElem = document.getElementById(`status-${aid}`);
+          const targetElem = document.getElementById(`target-${aid}`);
+          const taskElem = document.getElementById(`task-${aid}`);
+
+          if (statusElem) {
+            const st = (hb.status || (alive ? 'READY' : 'OFFLINE')).toUpperCase();
+            statusElem.textContent = st;
+            let badgeClass = 'badge';
+            if (st === 'RUNNING') badgeClass += ' badge-attack';
+            else if (st === 'READY') badgeClass += ' badge-up';
+            else if (st === 'SAFE_HOLD') badgeClass += ' badge-hold';
+            else if (st === 'SAFE_DEGRADED') badgeClass += ' badge-down';
+            else badgeClass += ' badge-local';
+            statusElem.className = badgeClass;
+          }
+
+          if (targetElem) {
+            targetElem.textContent = hb.current_target ? `Target: ${hb.current_target}` : 'Target: (none)';
+          }
+          if (taskElem) {
+            taskElem.textContent = hb.current_task_id ? `Task: ${hb.current_task_id}` : 'Task: idle';
+          }
+        });
+
+        // Task counts
+        const tCounts = swarm.task_counts || {};
+        document.getElementById('tasks-total').textContent = tCounts.total || 0;
+        document.getElementById('tasks-pending').textContent = tCounts.pending || 0;
+        document.getElementById('tasks-leased').textContent = tCounts.leased || 0;
+        document.getElementById('tasks-completed').textContent = tCounts.completed || 0;
+        document.getElementById('tasks-failed').textContent = tCounts.failed || 0;
+        document.getElementById('tasks-cancelled').textContent = tCounts.cancelled || 0;
+
+        if (swarm.kill_switch) {
+          const btn = document.getElementById('swarm-kill-btn');
+          btn.textContent = 'KILL SWITCH ENGAGED';
+          btn.style.background = 'var(--accent-red)';
+          btn.style.color = '#fff';
+        }
+      } else {
+        document.getElementById('swarm-phase-badge').textContent = 'SWARM: STANDALONE';
+      }
+    }
+
+    async function triggerKillSwitch() {
+      if (!confirm("Are you sure you want to engage the EMERGENCY KILL SWITCH across all 4 swarm agents?")) {
+        return;
+      }
+      try {
+        const resp = await fetch('/api/swarm/kill-switch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'Operator UI trigger' })
+        });
+        if (resp.ok) {
+          alert("Emergency Kill Switch engaged. All leases revoked.");
+          fetchStatus();
+        }
+      } catch (e) {
+        alert("Error sending kill switch signal: " + e);
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Initial fetch & start interval
+    fetchStatus();
+    setInterval(fetchStatus, 3000);
+  </script>
+</body>
+</html>

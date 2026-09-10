@@ -1,0 +1,111 @@
+{
+  "scenario": "full",
+  "timestamp": 1789059685.990962,
+  "status": "PASSED",
+  "summary": {
+    "total_steps": 1,
+    "passed_steps": 1,
+    "simulated_actions": 0,
+    "actual_executions": 0,
+    "safety_violations": 0
+  },
+  "sections": {
+    "network": {
+      "interfaces": [
+        {
+          "name": "lo",
+          "addresses": [
+            "127.0.0.1"
+          ],
+          "cidrs": [
+            "127.0.0.0/8"
+          ],
+          "is_up": true,
+          "interface_type": "LOOPBACK",
+          "mac": ""
+        },
+        {
+          "name": "wlan0",
+          "addresses": [
+            "192.168.1.50"
+          ],
+          "cidrs": [
+            "192.168.1.0/24"
+          ],
+          "is_up": true,
+          "interface_type": "WIFI",
+          "mac": "00:11:22:33:44:55"
+        },
+        {
+          "name": "tun0",
+          "addresses": [
+            "10.200.1.5"
+          ],
+          "cidrs": [
+            "10.200.0.0/16"
+          ],
+          "is_up": true,
+          "interface_type": "VPN",
+          "mac": ""
+        }
+      ],
+      "routes": [
+        {
+          "destination": "0.0.0.0",
+          "gateway": "192.168.1.1",
+          "interface": "wlan0",
+          "netmask": "0",
+          "metric": 100
+        },
+        {
+          "destination": "192.168.1.0",
+          "gateway": "0.0.0.0",
+          "interface": "wlan0",
+          "netmask": "24",
+          "metric": 100
+        },
+        {
+          "destination": "10.200.0.0",
+          "gateway": "0.0.0.0",
+          "interface": "tun0",
+          "netmask": "16",
+          "metric": 50
+        }
+      ],
+      "detected_mode": "WIFI_PLUS_VPN",
+      "competition_route_present": true,
+      "vpn_present": true,
+      "confidence": 0.95,
+      "failure_handling": "Wrong VPN route halted state machine to SAFE_HOLD as expected."
+    },
+    "scope": {
+      "competition_cidrs": [
+        "10.200.0.0/16"
+      ],
+      "own_hosts": [
+        "10.200.1.5"
+      ],
+      "own_services": [
+        "10.200.1.5:80:web-service",
+        "10.200.1.5:22:sshd"
+      ],
+      "target_hosts": [
+        "10.200.2.10",
+        "10.200.2.20"
+      ],
+      "scoreboard_url": "http://scoreboard.pwngrounds.local/api",
+      "verified": true
+    },
+    "safety_gates": {
+      "network_gates_verified": true,
+      "safe_hold_enforced_on_anomaly": true
+    },
+    "final_result": {
+      "scenario": "network",
+      "status": "PASSED",
+      "assertions_checked": 12
+    }
+  },
+  "simulated_actions": [],
+  "lifecycle_steps": []
+}
