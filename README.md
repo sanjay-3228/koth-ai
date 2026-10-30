@@ -39,6 +39,8 @@ koth-agent/
     dashboard.py         # Local Flask web dashboard and status API
     telemetry.py         # Scoreboard polling and telemetry normalization
     llm/
+      agent_config.py    # Independent LLM configuration manager & secret redaction
+      client_factory.py  # Safe probe client & advisory recommendation dispatcher
       types.py           # ModelDecision, ProviderMetrics, and provider type definitions
       parser.py          # 6-stage JSON/markdown/<think> parsing engine
       base.py            # BaseLLMProvider with circuit breakers, retries, and metrics
@@ -63,9 +65,22 @@ koth-agent/
       recon.py           # Port scanner and service fingerprinting
       plugin_interface.py# ExploitPlugin contract
       dispatcher.py      # Allowlisted exploit plugin execution
-  tests/                 # Comprehensive unit & integration test suite (290 tests)
+  desktop/               # Electron / React desktop control application
+  tests/                 # Comprehensive unit & integration test suite (308 tests)
   requirements.txt
 ```
+
+---
+
+## Independent Per-Agent LLM Architecture
+
+Each of the four swarm agents (`agent-01`, `agent-02`, `agent-03`, `agent-04`) has an independent, sovereign LLM configuration:
+
+- **Supported Providers**: OpenAI, Anthropic, Google Gemini, Custom Compatible API (Ollama/vLLM), and Local Simulated Adapter.
+- **Strict Isolation**: Cross-agent configuration reads and writes are blocked by backend RBAC (`HTTP 403 Forbidden`). One agent cannot view or alter another agent's credentials.
+- **Zero Secret Leakage**: API keys and tokens are stored securely in SQLite (`agent_llm_configs`), masked in all UI and API responses (`sk-...1234`), and scrubbed via `redact_secrets()` before logging.
+- **Safe Probes**: Connection testing uses a benign ping-pong query. Competition flags, passwords, private keys, and tokens are never sent to external models.
+- **Deterministic Invariant**: LLMs are strictly advisory and optional. The system operates fully deterministically if providers are unconfigured, disabled, or offline. All actions pass through the 4-stage deterministic authorization chain (`Policy -> Registry -> Task Authorization -> Final Execution Gate`).
 
 ---
 

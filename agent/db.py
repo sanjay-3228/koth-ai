@@ -130,6 +130,127 @@ class DatabaseManager:
                 ON action_log(timestamp DESC)
                 """
             )
+            # Persistent Emergency Stop State
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS emergency_stop_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    is_active INTEGER NOT NULL DEFAULT 0,
+                    triggered_by TEXT DEFAULT '',
+                    reason TEXT DEFAULT '',
+                    triggered_at REAL DEFAULT 0.0,
+                    reset_by TEXT DEFAULT '',
+                    reset_at REAL DEFAULT 0.0
+                )
+                """
+            )
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO emergency_stop_state (id, is_active) VALUES (1, 0)
+                """
+            )
+
+            # Persistent Audit Event Log
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT UNIQUE NOT NULL,
+                    event_type TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    target TEXT DEFAULT '',
+                    details TEXT DEFAULT '',
+                    timestamp REAL NOT NULL
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_audit_timestamp
+                ON audit_events(timestamp DESC)
+                """
+            )
+
+            # Persistent Per-Agent Independent LLM Configuration Table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_llm_configs (
+                    agent_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL DEFAULT 'none',
+                    endpoint TEXT DEFAULT '',
+                    model_id TEXT DEFAULT '',
+                    api_key TEXT DEFAULT '',
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    connection_status TEXT NOT NULL DEFAULT 'UNCONFIGURED',
+                    last_tested_at REAL DEFAULT 0.0,
+                    last_error TEXT DEFAULT '',
+                    updated_at REAL DEFAULT 0.0
+                )
+                """
+            )
+
+            # Persistent Notifications Table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS notifications (
+                    event_id TEXT PRIMARY KEY,
+                    timestamp REAL NOT NULL,
+                    event_type TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    agent_id TEXT DEFAULT '',
+                    hill_id INTEGER DEFAULT NULL,
+                    team_id TEXT DEFAULT '',
+                    competition_id TEXT DEFAULT '',
+                    title TEXT DEFAULT '',
+                    description TEXT NOT NULL,
+                    details_json TEXT DEFAULT '{}'
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_notifications_ts
+                ON notifications(timestamp DESC)
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_notifications_team
+                ON notifications(team_id, competition_id)
+                """
+            )
+
+            # Persistent Coordination Messages Table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS coordination_messages (
+                    message_id TEXT PRIMARY KEY,
+                    timestamp REAL NOT NULL,
+                    from_agent_id TEXT NOT NULL,
+                    to_agent_id TEXT NOT NULL,
+                    message_type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    hill_id INTEGER DEFAULT NULL,
+                    task_id TEXT DEFAULT '',
+                    team_id TEXT DEFAULT '',
+                    competition_id TEXT DEFAULT '',
+                    details_json TEXT DEFAULT '{}'
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_coord_messages_ts
+                ON coordination_messages(timestamp DESC)
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_coord_messages_team
+                ON coordination_messages(team_id, competition_id)
+                """
+            )
             conn.commit()
 
     def record_telemetry(self, telemetry: Any) -> int:
@@ -408,6 +529,329 @@ class DatabaseManager:
             f"{a['action_type']}:{a['target']}:{a['reasoning']}"
             for a in reversed(recent)
         ]
+
+    @staticmethod
+    def _sanitize_audit_details(details: Any) -> Any:
+        if isinstance(details, dict):
+            sanitized = {}
+            for k, v in details.items():
+                if any(s in str(k).lower() for s in ("password", "secret", "token", "flag", "key")):
+                    sanitized[k] = "[REDACTED]"
+                elif isinstance(v, (dict, list)):
+                    sanitized[k] = DatabaseManager._sanitize_audit_details(v)
+                else:
+                    sanitized[k] = v
+            return sanitized
+        elif isinstance(details, list):
+            return [DatabaseManager._sanitize_audit_details(item) for item in details]
+        return details
+
+    def set_emergency_stop(
+        self,
+        active: bool,
+        actor: str,
+        reason: str = "",
+    ) -> None:
+        """Persist emergency stop state to SQLite."""
+        now = time.time()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if active:
+                cursor.execute(
+                    """
+                    UPDATE emergency_stop_state
+                    SET is_active = 1, triggered_by = ?, reason = ?, triggered_at = ?
+                    WHERE id = 1
+                    """,
+                    (actor, reason, now),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE emergency_stop_state
+                    SET is_active = 0, reset_by = ?, reset_at = ?
+                    WHERE id = 1
+                    """,
+                    (actor, now),
+                )
+            conn.commit()
+
+        # Log audit event for emergency stop transition
+        event_type = "EMERGENCY_STOP_TRIGGERED" if active else "EMERGENCY_STOP_RESET"
+        self.record_audit_event(
+            event_type=event_type,
+            actor=actor,
+            target="swarm_coordinator",
+            details={"active": active, "reason": reason, "timestamp": now},
+        )
+
+    def get_emergency_stop(self) -> Dict[str, Any]:
+        """Fetch current persisted emergency stop state."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM emergency_stop_state WHERE id = 1")
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "is_active": bool(row["is_active"]),
+                    "triggered_by": row["triggered_by"],
+                    "reason": row["reason"],
+                    "triggered_at": row["triggered_at"],
+                    "reset_by": row["reset_by"],
+                    "reset_at": row["reset_at"],
+                }
+            return {"is_active": False}
+
+    def record_audit_event(
+        self,
+        event_type: str,
+        actor: str,
+        target: str = "",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Record an immutable, redacted audit event to SQLite."""
+        import uuid
+        event_id = f"aud-{uuid.uuid4().hex[:12]}"
+        now = time.time()
+        sanitized = self._sanitize_audit_details(details or {})
+        details_json = json.dumps(sanitized)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO audit_events (event_id, event_type, actor, target, details, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (event_id, event_type, actor, target, details_json, now),
+            )
+            conn.commit()
+        return event_id
+
+    def get_audit_events(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Fetch recent audit events in reverse chronological order."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT event_id, event_type, actor, target, details, timestamp
+                FROM audit_events
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = cursor.fetchall()
+            events = []
+            for r in rows:
+                try:
+                    parsed_details = json.loads(r["details"] or "{}")
+                except Exception:
+                    parsed_details = {}
+                events.append({
+                    "event_id": r["event_id"],
+                    "event_type": r["event_type"],
+                    "actor": r["actor"],
+                    "target": r["target"],
+                    "details": parsed_details,
+                    "timestamp": r["timestamp"],
+                })
+            return events
+
+    def record_notification(
+        self,
+        event_type: str,
+        category: str,
+        severity: str,
+        description: str,
+        event_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        hill_id: Optional[int] = None,
+        team_id: Optional[str] = None,
+        competition_id: Optional[str] = None,
+        title: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        timestamp: Optional[float] = None,
+    ) -> str:
+        """Persist a notification with anti-duplication."""
+        import uuid
+        eid = event_id or f"notif-{uuid.uuid4().hex[:12]}"
+        ts = timestamp if timestamp is not None else time.time()
+        details_json = json.dumps(details or {})
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO notifications (
+                    event_id, timestamp, event_type, category, severity,
+                    agent_id, hill_id, team_id, competition_id, title, description, details_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    eid,
+                    ts,
+                    str(event_type),
+                    str(category).upper(),
+                    str(severity).upper(),
+                    agent_id or "",
+                    hill_id,
+                    team_id or "",
+                    competition_id or "",
+                    title or "",
+                    description,
+                    details_json,
+                ),
+            )
+            conn.commit()
+        return eid
+
+    def get_notifications(
+        self,
+        team_id: Optional[str] = None,
+        competition_id: Optional[str] = None,
+        category: Optional[str] = None,
+        since_ts: Optional[float] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Fetch notifications in reverse chronological order."""
+        query = "SELECT * FROM notifications WHERE 1=1"
+        params: List[Any] = []
+        if team_id:
+            query += " AND (team_id = ? OR team_id = '')"
+            params.append(team_id)
+        if competition_id:
+            query += " AND (competition_id = ? OR competition_id = '')"
+            params.append(competition_id)
+        if category and category.upper() != "ALL":
+            query += " AND category = ?"
+            params.append(category.upper())
+        if since_ts:
+            query += " AND timestamp >= ?"
+            params.append(since_ts)
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            notifs = []
+            for r in rows:
+                try:
+                    dt = json.loads(r["details_json"] or "{}")
+                except Exception:
+                    dt = {}
+                notifs.append({
+                    "event_id": r["event_id"],
+                    "timestamp": r["timestamp"],
+                    "event_type": r["event_type"],
+                    "category": r["category"],
+                    "severity": r["severity"],
+                    "agent_id": r["agent_id"] or None,
+                    "hill_id": r["hill_id"],
+                    "team_id": r["team_id"] or None,
+                    "competition_id": r["competition_id"] or None,
+                    "title": r["title"],
+                    "description": r["description"],
+                    "details": dt,
+                })
+            return notifs
+
+    def record_coordination_message(
+        self,
+        from_agent_id: str,
+        to_agent_id: str,
+        message_type: str,
+        content: str,
+        message_id: Optional[str] = None,
+        hill_id: Optional[int] = None,
+        task_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+        competition_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        timestamp: Optional[float] = None,
+    ) -> str:
+        """Persist an inter-agent coordination message."""
+        import uuid
+        mid = message_id or f"msg-{uuid.uuid4().hex[:12]}"
+        ts = timestamp if timestamp is not None else time.time()
+        details_json = json.dumps(details or {})
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO coordination_messages (
+                    message_id, timestamp, from_agent_id, to_agent_id,
+                    message_type, content, hill_id, task_id, team_id, competition_id, details_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    mid,
+                    ts,
+                    from_agent_id,
+                    to_agent_id,
+                    message_type,
+                    content,
+                    hill_id,
+                    task_id or "",
+                    team_id or "",
+                    competition_id or "",
+                    details_json,
+                ),
+            )
+            conn.commit()
+        return mid
+
+    def get_coordination_messages(
+        self,
+        team_id: Optional[str] = None,
+        competition_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        since_ts: Optional[float] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Fetch inter-agent coordination messages."""
+        query = "SELECT * FROM coordination_messages WHERE 1=1"
+        params: List[Any] = []
+        if team_id:
+            query += " AND (team_id = ? OR team_id = '')"
+            params.append(team_id)
+        if competition_id:
+            query += " AND (competition_id = ? OR competition_id = '')"
+            params.append(competition_id)
+        if agent_id:
+            query += " AND (from_agent_id = ? OR to_agent_id = ? OR to_agent_id = 'ALL')"
+            params.extend([agent_id, agent_id])
+        if since_ts:
+            query += " AND timestamp >= ?"
+            params.append(since_ts)
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            msgs = []
+            for r in rows:
+                try:
+                    dt = json.loads(r["details_json"] or "{}")
+                except Exception:
+                    dt = {}
+                msgs.append({
+                    "message_id": r["message_id"],
+                    "timestamp": r["timestamp"],
+                    "from_agent_id": r["from_agent_id"],
+                    "to_agent_id": r["to_agent_id"],
+                    "message_type": r["message_type"],
+                    "content": r["content"],
+                    "hill_id": r["hill_id"],
+                    "task_id": r["task_id"] or None,
+                    "team_id": r["team_id"] or None,
+                    "competition_id": r["competition_id"] or None,
+                    "details": dt,
+                })
+            return msgs
 
     @staticmethod
     def _row_to_telemetry_dict(row: sqlite3.Row) -> Dict[str, Any]:

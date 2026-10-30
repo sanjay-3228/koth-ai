@@ -611,6 +611,19 @@ class NvidiaDecisionEngine:
 
         Strictly advisory. Never executes actions.
         """
+        if not self.api_key:
+            return Decision(
+                action_type="hold",
+                target="",
+                priority="low",
+                reasoning="No LLM API key configured; operating in safe deterministic mode.",
+                confidence=1.0,
+                model_used="deterministic-safe-hold",
+                latency_ms=0.0,
+                api_latency_ms=0.0,
+                http_status=200,
+            ).sanitize()
+
         cooldown_decision = self._check_quota_cooldown()
         if cooldown_decision is not None:
             return cooldown_decision

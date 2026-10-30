@@ -223,10 +223,13 @@ class TestModelRouter(unittest.TestCase):
         self.assertIn("nvidia/nemotron-3.5-lightning-30b-a3b", str(ctx.exception))
 
     def test_api_key_missing(self):
-        """Verify startup validation fails clearly if API key is missing."""
+        """Verify startup validation fails clearly if API key is missing when required, while zero-cred mode succeeds."""
         cfg = Config(nvidia_api_key="", gemini_api_key="", scoreboard_url="http://scoreboard/api")
+        # Zero-credential mode succeeds
+        cfg.validate(skip_model_check=True)
+        # When require_llm=True, it raises RuntimeError
         with self.assertRaises(RuntimeError) as ctx:
-            cfg.validate(skip_model_check=True)
+            cfg.validate(skip_model_check=True, require_llm=True)
 
         self.assertIn("Missing required config: NVIDIA_API_KEY", str(ctx.exception))
 

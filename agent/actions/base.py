@@ -15,13 +15,16 @@ from ..attack.recon import ReconScanner
 
 @dataclass
 class ActionContext:
-    config: Config
-    monitor: ServiceMonitor
-    firewall: FirewallManager
-    patcher: ServicePatcher
-    recon: ReconScanner
-    dispatcher: PluginDispatcher
+    config: Config = field(default_factory=Config)
+    monitor: Any = None
+    firewall: Any = None
+    patcher: Any = None
+    recon: Any = None
+    dispatcher: Any = None
     db: Any = None
+    agent_id: str = ""
+    team_id: str = ""
+    dry_run: bool = False
 
 
 @dataclass
@@ -98,6 +101,23 @@ class ActionExecutionRecord:
         )
         self.dry_run_record = rec
         return rec
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "action_id": self.action_id,
+            "action_type": self.action_type,
+            "action_name": self.action_name,
+            "target": self.target,
+            "model_used": self.model_used,
+            "model_confidence": self.model_confidence,
+            "attempted": self.attempted,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+            "success": self.success,
+            "failure_reason": self.failure_reason,
+            "verification_result": self.verification_result,
+            "empirical_success": self.empirical_success,
+        }
 
 
 

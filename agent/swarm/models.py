@@ -123,6 +123,12 @@ class Task:
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     phase_epoch: Optional[int] = None
+    hill_id: Optional[int] = None
+    dependencies: List[str] = field(default_factory=list)
+    parent_task_id: Optional[str] = None
+    progress: int = 0
+    description: str = ""
+    coordination_role: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -141,6 +147,12 @@ class Task:
             "result": self.result,
             "error": self.error,
             "phase_epoch": self.phase_epoch,
+            "hill_id": self.hill_id,
+            "dependencies": list(self.dependencies),
+            "parent_task_id": self.parent_task_id,
+            "progress": self.progress,
+            "description": self.description,
+            "coordination_role": self.coordination_role,
         }
 
     @classmethod
@@ -161,6 +173,12 @@ class Task:
             result=data.get("result"),
             error=data.get("error"),
             phase_epoch=data.get("phase_epoch"),
+            hill_id=data.get("hill_id"),
+            dependencies=list(data.get("dependencies", [])),
+            parent_task_id=data.get("parent_task_id"),
+            progress=int(data.get("progress", 0)),
+            description=str(data.get("description", "")),
+            coordination_role=str(data.get("coordination_role", "")),
         )
 
 
@@ -260,6 +278,7 @@ class AgentSession:
     last_heartbeat: float = field(default_factory=time.time)
     ttl: float = 30.0
     revoked: bool = False
+    username: Optional[str] = None
 
     def is_active(self, now: Optional[float] = None) -> bool:
         if self.revoked:
@@ -276,4 +295,53 @@ class AgentSession:
             "last_heartbeat": self.last_heartbeat,
             "ttl": self.ttl,
             "revoked": self.revoked,
+            "username": self.username,
         }
+
+
+@dataclass
+class CoordinationMessage:
+    """Inter-agent coordination message for objective breakdown, status, blockers, and findings."""
+    message_id: str
+    from_agent_id: str
+    to_agent_id: str  # specific agent ID or "ALL"
+    message_type: str  # "OBJECTIVE", "TASK_ASSIGNMENT", "STATUS_UPDATE", "ASSISTANCE_REQUEST", "BLOCKER_REPORT", "FINDING_SHARED"
+    content: str
+    timestamp: float = field(default_factory=time.time)
+    hill_id: Optional[int] = None
+    task_id: Optional[str] = None
+    team_id: Optional[str] = None
+    competition_id: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "message_id": self.message_id,
+            "from_agent_id": self.from_agent_id,
+            "to_agent_id": self.to_agent_id,
+            "message_type": self.message_type,
+            "content": self.content,
+            "timestamp": self.timestamp,
+            "hill_id": self.hill_id,
+            "task_id": self.task_id,
+            "team_id": self.team_id,
+            "competition_id": self.competition_id,
+            "details": self.details,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> CoordinationMessage:
+        return cls(
+            message_id=data["message_id"],
+            from_agent_id=data.get("from_agent_id", "agent-01"),
+            to_agent_id=data.get("to_agent_id", "ALL"),
+            message_type=data.get("message_type", "STATUS_UPDATE"),
+            content=data.get("content", ""),
+            timestamp=float(data.get("timestamp", time.time())),
+            hill_id=data.get("hill_id"),
+            task_id=data.get("task_id"),
+            team_id=data.get("team_id"),
+            competition_id=data.get("competition_id"),
+            details=dict(data.get("details", {})),
+        )
+

@@ -525,11 +525,11 @@ class SwarmClient:
             logger.error(f"Error completing task {tid}: {e}")
             return False
 
-    def fail_task(self, error: str, retryable: bool = True) -> bool:
+    def fail_task(self, error: str, retryable: bool = True, task_id: Optional[str] = None) -> bool:
         with self._lock:
-            if not self.current_task:
+            tid = task_id or (self.current_task.task_id if self.current_task else None)
+            if not tid:
                 return False
-            tid = self.current_task.task_id
 
         try:
             if self.coordinator:
@@ -698,4 +698,127 @@ class SwarmClient:
             return None
         except Exception as e:
             logger.error(f"Error getting coordinator status: {e}")
+            return None
+
+    def get_llm_config(self) -> Optional[Dict[str, Any]]:
+        """Fetch isolated LLM configuration for this agent."""
+        try:
+            if self.coordinator:
+                return self.coordinator.llm_config_manager.get_config(self.agent_id, mask_secrets=True)
+            elif self.coordinator_url:
+                import requests
+                r = requests.get(
+                    f"{self.coordinator_url}/api/agent/{self.agent_id}/llm",
+                    headers=self._get_headers(),
+                    timeout=self.request_timeout,
+                    verify=self._verify_setting(),
+                )
+                if r.status_code == 401:
+                    self._handle_unauthorized()
+                    return None
+                return r.json() if r.status_code == 200 else None
+            return None
+        except Exception as e:
+            logger.error(f"[{self.agent_id}] Error getting LLM config: {e}")
+            return None
+
+    def set_llm_config(
+        self,
+        provider: str,
+        endpoint: str = "",
+        model_id: str = "",
+        api_key: Optional[str] = None,
+        enabled: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """Update isolated LLM configuration for this agent."""
+        payload = {
+            "provider": provider,
+            "endpoint": endpoint,
+            "model_id": model_id,
+            "enabled": enabled,
+        }
+        if api_key is not None:
+            payload["api_key"] = api_key
+
+        try:
+            if self.coordinator:
+                return self.coordinator.llm_config_manager.set_config(
+                    agent_id=self.agent_id,
+                    provider=provider,
+                    endpoint=endpoint,
+                    model_id=model_id,
+                    api_key=api_key,
+                    enabled=enabled,
+                )
+            elif self.coordinator_url:
+                import requests
+                r = requests.post(
+                    f"{self.coordinator_url}/api/agent/{self.agent_id}/llm",
+                    json=payload,
+                    headers=self._get_headers(),
+                    timeout=self.request_timeout,
+                    verify=self._verify_setting(),
+                )
+                if r.status_code == 401:
+                    self._handle_unauthorized()
+                    return None
+                return r.json() if r.status_code == 200 else None
+            return None
+        except Exception as e:
+            logger.error(f"[{self.agent_id}] Error setting LLM config: {e}")
+            return None
+
+    def test_llm_connection(self, data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """Run safe connection test for this agent's LLM settings."""
+        try:
+            if self.coordinator:
+                raw_cfg = self.coordinator.llm_config_manager.get_raw_config(self.agent_id)
+                if not raw_cfg:
+                    from agent.llm.agent_config import AgentLLMConfig
+                    raw_cfg = AgentLLMConfig(agent_id=self.agent_id)
+                from agent.llm.client_factory import AgentLLMClient
+                client = AgentLLMClient(raw_cfg, timeout_seconds=6.0)
+                success, message, latency_ms = client.test_connection()
+                new_status = "CONNECTED" if success else "FAILED"
+                if not raw_cfg.enabled:
+                    new_status = "DISABLED"
+                self.coordinator.llm_config_manager.update_connection_status(
+                    self.agent_id, new_status, "" if success else message
+                )
+                return {"success": success, "status": new_status, "message": message, "latency_ms": latency_ms}
+            elif self.coordinator_url:
+                import requests
+                r = requests.post(
+                    f"{self.coordinator_url}/api/agent/{self.agent_id}/llm/test",
+                    json=data or {},
+                    headers=self._get_headers(),
+                    timeout=10.0,
+                    verify=self._verify_setting(),
+                )
+                if r.status_code == 401:
+                    self._handle_unauthorized()
+                    return None
+                return r.json() if r.status_code == 200 else None
+            return None
+        except Exception as e:
+            logger.error(f"[{self.agent_id}] Error testing LLM connection: {e}")
+            return None
+
+    def query_advisory_llm(self, context_prompt: str) -> Optional[Dict[str, Any]]:
+        """Obtain advisory recommendation using this agent's configured LLM.
+        
+        Strictly advisory: returns None on failure or if disabled/unconfigured.
+        """
+        try:
+            if self.coordinator:
+                raw_cfg = self.coordinator.llm_config_manager.get_raw_config(self.agent_id)
+                if not raw_cfg or not raw_cfg.enabled:
+                    return None
+                from agent.llm.client_factory import AgentLLMClient
+                client = AgentLLMClient(raw_cfg, timeout_seconds=10.0)
+                decision = client.query_advisory(context_prompt)
+                return decision.to_dict() if decision else None
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.agent_id}] Advisory query failed: {e}")
             return None

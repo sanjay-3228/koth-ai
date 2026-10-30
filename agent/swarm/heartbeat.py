@@ -37,6 +37,9 @@ class HeartbeatMonitor:
         agent_id = heartbeat.agent_id
         with self._lock:
             first_seen = agent_id not in self._heartbeats
+            was_disconnected = (
+                not first_seen and self._heartbeats[agent_id].status == AgentStatus.DISCONNECTED
+            )
             self._heartbeats[agent_id] = heartbeat
             self._last_seen[agent_id] = now
 
@@ -44,6 +47,14 @@ class HeartbeatMonitor:
             self.event_bus.publish(
                 SwarmEvent(
                     event_type=EventType.AGENT_JOINED,
+                    source_agent_id=agent_id,
+                    data=heartbeat.to_dict(),
+                )
+            )
+        elif was_disconnected and self.event_bus:
+            self.event_bus.publish(
+                SwarmEvent(
+                    event_type=EventType.AGENT_RECONNECTED,
                     source_agent_id=agent_id,
                     data=heartbeat.to_dict(),
                 )

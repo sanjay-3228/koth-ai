@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .parser import parse_model_response
 from .providers.groq import GroqGptOssProvider
+from .providers.local_simulated import LocalAdvisoryProvider, SimulatedAdvisoryProvider
 from .providers.nvidia import NvidiaNemotronProvider
 from .providers.openrouter import OpenRouterGlmProvider
 from .types import ModelDecision, ProviderMetrics
@@ -68,6 +69,12 @@ class TieredModelRouter:
 
         self.fast_threshold = self.config.fast_confidence_threshold
         self.reasoning_threshold = self.config.reasoning_confidence_threshold
+
+        self.simulated_provider = SimulatedAdvisoryProvider()
+        if getattr(self.config, "local_llm_endpoint", ""):
+            self.local_provider = LocalAdvisoryProvider(endpoint=self.config.local_llm_endpoint)
+        else:
+            self.local_provider = None
 
         # Operational metrics
         self.total_decisions = 0
@@ -249,6 +256,38 @@ class TieredModelRouter:
             if mock_res is not None:
                 self._log_decision_to_db(mock_res)
                 return mock_res.sanitize()
+
+        # Check if simulated advisory LLM is explicitly enabled
+        if getattr(self.config, "enable_simulated_llm", False):
+            adv_decision = self.simulated_provider.decide(
+                telemetry=telemetry,
+                prompt=str(context),
+                context=swarm_context,
+            )
+            self._log_decision_to_db(adv_decision)
+            return adv_decision.sanitize()
+
+        # Check if any LLM provider is configured; if none, cleanly hold without network calls
+        if (
+            not self.fast_provider.is_configured()
+            and not self.reasoning_provider.is_configured()
+            and not self.specialist_provider.is_configured()
+        ):
+            self.safe_hold_count += 1
+            safe_hold = ModelDecision(
+                action="hold",
+                target="",
+                priority="LOW",
+                confidence=1.0,
+                observation="No LLM providers configured; running in deterministic mode.",
+                reasoning_summary="No external LLM credentials configured; baseline hold.",
+                provider="deterministic-policy",
+                model="deterministic-safe-hold",
+                fallback_level=0,
+                parse_status="SUCCESS",
+            )
+            self._log_decision_to_db(safe_hold)
+            return safe_hold.sanitize()
 
         # 2. Tier 1: Fast / Tactical - NVIDIA Nemotron
         fast_decision = self.fast_provider.generate_decision(context, fallback_level=1)
@@ -433,6 +472,25 @@ class TieredModelRouter:
                 )
             except Exception:
                 pass
+
+    def decide(
+        self,
+        telemetry: Any = None,
+        telemetry_summary: str = "",
+        recent_actions: Optional[List[str]] = None,
+        brain: Any = None,
+        monitor_snapshot: Optional[Dict[str, Any]] = None,
+        swarm_context: Optional[Dict[str, Any]] = None,
+    ) -> ModelDecision:
+        """Convenience alias for execute_decision."""
+        return self.execute_decision(
+            telemetry=telemetry,
+            telemetry_summary=telemetry_summary,
+            recent_actions=recent_actions or [],
+            brain=brain,
+            monitor_snapshot=monitor_snapshot,
+            swarm_context=swarm_context,
+        )
 
     def get_metrics_summary(self) -> Dict[str, Any]:
         """Aggregate metrics across providers for health probes and dashboards."""

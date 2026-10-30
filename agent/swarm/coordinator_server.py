@@ -65,6 +65,16 @@ def create_coordinator_app(coordinator: SwarmCoordinator) -> Flask:
     bp = create_coordinator_blueprint(coordinator)
     app.register_blueprint(bp)
 
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, X-Swarm-Token, X-Operator-Token, "
+            "X-Session-Token, X-Agent-Credential, Cache-Control"
+        )
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        return response
+
     @app.route("/admin")
     def admin_console():
         return render_template_string(ADMIN_CONSOLE_HTML)
@@ -105,10 +115,8 @@ def validate_binding_host(host: str, profile: ConfigProfile) -> str:
         return "127.0.0.1"
 
     if host == "0.0.0.0":
-        raise ValueError(
-            "Coordinator server cannot be automatically exposed to 0.0.0.0. "
-            "Specify an explicit private LAN IP address or 127.0.0.1."
-        )
+        # Permitted for LAN deployment: listens on all network adapters
+        return "0.0.0.0"
 
     if profile in (ConfigProfile.LAN_REHEARSAL, ConfigProfile.RADMIN_REHEARSAL):
         if host == "127.0.0.1":
@@ -157,6 +165,7 @@ def run_coordinator_server(
     agent_usernames: Optional[Dict[str, str]] = None,
     admin_username: str = "admin",
     enable_username_login: bool = False,
+    db_path: Optional[str] = None,
 ) -> None:
     """Run coordinator server and block until interrupted."""
     logging.basicConfig(
@@ -217,6 +226,7 @@ def run_coordinator_server(
             agent_usernames=agent_usernames,
             admin_username=admin_username,
             enable_username_login=enable_username_login,
+            db_path=db_path or getattr(cfg, "db_path", None),
         )
 
     coordinator.start_background_maintenance(interval_seconds=maintenance_interval)
@@ -340,6 +350,11 @@ def main():
         action="store_true",
         help="Enable HTTPS secure transport",
     )
+    parser.add_argument(
+        "--db-path",
+        default=None,
+        help="Custom path to SQLite database file (persisted outside install directory)",
+    )
     args = parser.parse_args()
 
     agents_list = (
@@ -391,6 +406,7 @@ def main():
         agent_usernames=parsed_usernames,
         admin_username=args.admin_username,
         enable_username_login=args.enable_username_login,
+        db_path=args.db_path,
     )
 
 

@@ -69,6 +69,19 @@ class FinalExecutionGate:
           policy authorization -> registry authorization -> task authorization -> FINAL execution authorization
         """
         # ======================================================================
+        # STAGE 0: Global Emergency Stop / Kill Switch Gate
+        # ======================================================================
+        if self.config.kill_switch or (swarm_client and getattr(swarm_client, "kill_switch_active", False)):
+            logger.critical("[GATE: KILL SWITCH] Kill switch is active! Execution strictly forbidden.")
+            return ExecutionGateResult(
+                allowed=False,
+                reason="FINAL execution authorization rejected: Kill switch is active",
+                stage="final_execution_authorization",
+                risk_level=RiskLevel.CRITICAL,
+                action=HoldAction(),
+            )
+
+        # ======================================================================
         # STAGE 1: Policy Authorization
         # ======================================================================
         policy_res: AuthorizationResult = self.security_policy.authorize(decision)
@@ -111,6 +124,19 @@ class FinalExecutionGate:
         # ======================================================================
         # STAGE 3: Task Authorization
         # ======================================================================
+        if swarm_client is not None and getattr(swarm_client, "current_phase", None) and swarm_client.current_phase.value in ("ATTACK", "DEFENSE"):
+            if decision.action_type != "hold" and task is None:
+                logger.warning(
+                    f"[GATE 3: TASK REJECTION] Active swarm phase '{swarm_client.current_phase.value}' requires an authorized task lease"
+                )
+                return ExecutionGateResult(
+                    allowed=False,
+                    reason=f"Task authorization rejected: missing authorized task for phase '{swarm_client.current_phase.value}'",
+                    stage="task_authorization",
+                    risk_level=RiskLevel.HIGH,
+                    action=HoldAction(),
+                )
+
         if task is not None:
             if task.status == TaskStatus.CANCELLED:
                 logger.warning(
@@ -125,6 +151,35 @@ class FinalExecutionGate:
                 )
 
             if swarm_client is not None:
+                # Validate agent identity
+                if task.assigned_agent_id and task.assigned_agent_id != getattr(swarm_client, "agent_id", ""):
+                    logger.warning(
+                        f"[GATE 3: TASK REJECTION] Agent mismatch: task assigned to '{task.assigned_agent_id}' but executed by '{getattr(swarm_client, 'agent_id', '')}'"
+                    )
+                    return ExecutionGateResult(
+                        allowed=False,
+                        reason="Task authorization rejected: task assigned to different agent",
+                        stage="task_authorization",
+                        risk_level=RiskLevel.CRITICAL,
+                        action=HoldAction(),
+                    )
+
+                # Validate hill assignment
+                agent_hill_map = {"agent-01": 1, "agent-02": 2, "agent-03": 3, "agent-04": 4}
+                agent_id = getattr(swarm_client, "agent_id", "")
+                if task.hill_id and agent_id in agent_hill_map and task.hill_id != agent_hill_map[agent_id]:
+                    if agent_id != "agent-01":
+                        logger.warning(
+                            f"[GATE 3: TASK REJECTION] Hill isolation violation: task belongs to hill {task.hill_id} but agent '{agent_id}' is assigned to hill {agent_hill_map[agent_id]}"
+                        )
+                        return ExecutionGateResult(
+                            allowed=False,
+                            reason="Task authorization rejected: hill assignment mismatch",
+                            stage="task_authorization",
+                            risk_level=RiskLevel.CRITICAL,
+                            action=HoldAction(),
+                        )
+
                 # Validate lease ownership
                 if swarm_client.current_lease and task.lease_id:
                     if swarm_client.current_lease.lease_id != task.lease_id:
@@ -134,6 +189,18 @@ class FinalExecutionGate:
                         return ExecutionGateResult(
                             allowed=False,
                             reason="Task authorization rejected: lease mismatch or lease revoked",
+                            stage="task_authorization",
+                            risk_level=RiskLevel.HIGH,
+                            action=HoldAction(),
+                        )
+                elif task.lease_id and not swarm_client.current_lease:
+                    if task.phase == getattr(swarm_client, "current_phase", None):
+                        logger.warning(
+                            f"[GATE 3: TASK REJECTION] Task {task.task_id} requires lease {task.lease_id} but agent holds no active lease"
+                        )
+                        return ExecutionGateResult(
+                            allowed=False,
+                            reason="Task authorization rejected: agent holds no active lease",
                             stage="task_authorization",
                             risk_level=RiskLevel.HIGH,
                             action=HoldAction(),

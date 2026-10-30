@@ -1014,15 +1014,28 @@
       if (!confirm("Are you sure you want to engage the EMERGENCY KILL SWITCH across all 4 swarm agents?")) {
         return;
       }
+      let session = sessionStorage.getItem('koth_session') || '';
+      if (!session) {
+        session = prompt("Enter Operator Session Token / Credentials to authorize emergency stop:");
+        if (!session) return;
+        sessionStorage.setItem('koth_session', session);
+      }
       try {
         const resp = await fetch('/api/swarm/kill-switch', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Session-Token': session,
+            'Authorization': 'Bearer ' + session
+          },
           body: JSON.stringify({ reason: 'Operator UI trigger' })
         });
+        const data = await resp.json().catch(() => ({}));
         if (resp.ok) {
-          alert("Emergency Kill Switch engaged. All leases revoked.");
+          alert("Emergency Kill Switch engaged. All leases revoked and all agents halted.");
           fetchStatus();
+        } else {
+          alert("Kill switch rejected (" + resp.status + "): " + (data.message || data.error || "Unauthorized"));
         }
       } catch (e) {
         alert("Error sending kill switch signal: " + e);

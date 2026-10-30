@@ -117,6 +117,10 @@ class Config:
     pwn_target_hosts_raw: str = os.getenv("PWN_TARGET_HOSTS", "")
     pwn_scoreboard_url: str = os.getenv("PWN_SCOREBOARD_URL", "")
 
+    # Replacement Advisory LLM Configuration
+    enable_simulated_llm: bool = os.getenv("ENABLE_SIMULATED_LLM", "false").lower() in ("true", "1")
+    local_llm_endpoint: str = os.getenv("LOCAL_LLM_ENDPOINT", "")
+
     # Swarm Configuration for 4-Agent Team
     team_id: str = os.getenv("TEAM_ID", "null_warriors")
     agent_id: str = os.getenv("AGENT_ID", "agent-01")
@@ -372,10 +376,12 @@ class Config:
 
     def validate_models(self) -> List[str]:
         """Fetch available models from NVIDIA NIM API and verify configured models exist."""
+        if not self.nvidia_api_key and not self.gemini_api_key:
+            return []
         url = f"{self.nvidia_base_url}/models"
-        headers = {"Authorization": f"Bearer {self.nvidia_api_key}"}
+        headers = {"Authorization": f"Bearer {self.nvidia_api_key or self.gemini_api_key}"}
         try:
-            resp = requests.get(url, headers=headers, params={"key": self.gemini_api_key, "pageSize": 100}, timeout=15)
+            resp = requests.get(url, headers=headers, timeout=15)
             if resp.status_code != 200:
                 raise RuntimeError(
                     f"NVIDIA API returned status {resp.status_code} during model validation. "
@@ -403,7 +409,7 @@ class Config:
             )
         return available
 
-    def validate(self, skip_model_check: bool = False) -> None:
+    def validate(self, skip_model_check: bool = False, require_llm: bool = False) -> None:
         # Binding host safety validation
         if self.swarm_bind_host == "0.0.0.0":
             raise RuntimeError("Coordinator cannot be bound to 0.0.0.0. Specify an explicit private IP address or 127.0.0.1.")
@@ -429,16 +435,22 @@ class Config:
                 raise RuntimeError(f"SWARM_BIND_HOST '{self.swarm_bind_host}' is not a valid IP address.")
 
         missing = []
-        if self.lab_profile not in ("LOCAL_REHEARSAL", "LAN_REHEARSAL", "RADMIN_REHEARSAL") and not self.nvidia_api_key and not self.gemini_api_key:
-            missing.append("NVIDIA_API_KEY (GEMINI_API_KEY)")
+        if require_llm and not self.nvidia_api_key and not self.gemini_api_key:
+            missing.append("NVIDIA_API_KEY")
         if self.lab_profile not in ("LOCAL_REHEARSAL", "LAN_REHEARSAL", "RADMIN_REHEARSAL") and not self.scoreboard_url:
             missing.append("SCOREBOARD_URL")
         if missing:
             raise RuntimeError(f"Missing required config: {', '.join(missing)}")
 
-        # Validate models against the actual NVIDIA NIM API unless skipped
+        # Validate models against API only if an API key is configured AND not skipped
         skip_env = os.getenv("SKIP_MODEL_VALIDATION", "false").lower() in ("true", "1")
-        if self.lab_profile not in ("LOCAL_REHEARSAL", "LAN_REHEARSAL", "RADMIN_REHEARSAL") and not skip_model_check and not skip_env:
+        has_key = bool(self.nvidia_api_key or self.gemini_api_key)
+        if (
+            self.lab_profile not in ("LOCAL_REHEARSAL", "LAN_REHEARSAL", "RADMIN_REHEARSAL")
+            and not skip_model_check
+            and not skip_env
+            and has_key
+        ):
             self.validate_models()
 
 

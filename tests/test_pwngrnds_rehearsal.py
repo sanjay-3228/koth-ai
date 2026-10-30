@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -167,8 +168,15 @@ class TestRehearsalFakes(unittest.TestCase):
 class TestRehearsalScenarios(unittest.TestCase):
     """Test all individual scenarios and full lifecycle."""
 
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.report_dir = self.tmp_dir.name
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
     def test_scenario_network(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         report = harness.run_network_scenario()
         self.assertEqual(report["scenario"], "network")
         self.assertEqual(report["status"], "PASSED")
@@ -178,7 +186,7 @@ class TestRehearsalScenarios(unittest.TestCase):
             self.assertFalse(rec.actually_executed)
 
     def test_scenario_telemetry(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         report = harness.run_telemetry_scenario()
         self.assertEqual(report["scenario"], "telemetry")
         self.assertEqual(report["status"], "PASSED")
@@ -188,7 +196,7 @@ class TestRehearsalScenarios(unittest.TestCase):
             self.assertFalse(rec.actually_executed)
 
     def test_scenario_ai(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         report = harness.run_ai_scenario()
         self.assertEqual(report["scenario"], "ai")
         self.assertEqual(report["status"], "PASSED")
@@ -198,7 +206,7 @@ class TestRehearsalScenarios(unittest.TestCase):
             self.assertFalse(rec.actually_executed)
 
     def test_scenario_authorization(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         report = harness.run_authorization_scenario()
         self.assertEqual(report["scenario"], "authorization")
         self.assertEqual(report["status"], "PASSED")
@@ -211,7 +219,7 @@ class TestRehearsalScenarios(unittest.TestCase):
             self.assertFalse(rec.actually_executed)
 
     def test_scenario_recovery(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         report = harness.run_recovery_scenario()
         self.assertEqual(report["scenario"], "recovery")
         self.assertEqual(report["status"], "PASSED")
@@ -221,7 +229,7 @@ class TestRehearsalScenarios(unittest.TestCase):
             self.assertFalse(rec.actually_executed)
 
     def test_scenario_failures(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         report = harness.run_failures_scenario()
         self.assertEqual(report["scenario"], "failures")
         self.assertEqual(report["status"], "PASSED")
@@ -231,7 +239,7 @@ class TestRehearsalScenarios(unittest.TestCase):
             self.assertFalse(rec.actually_executed)
 
     def test_scenario_full_33_steps(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         report = harness.run_full_scenario()
         self.assertEqual(report["scenario"], "full")
         self.assertEqual(report["status"], "PASSED")
@@ -255,8 +263,15 @@ class TestRehearsalScenarios(unittest.TestCase):
 class TestRehearsalReports(unittest.TestCase):
     """Test report generation and presence of all 14 mandatory sections."""
 
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.report_dir = self.tmp_dir.name
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
     def test_14_mandatory_sections_in_json_and_markdown(self):
-        harness = PwnGroundsRehearsalHarness()
+        harness = PwnGroundsRehearsalHarness(report_dir=self.report_dir)
         harness.run_full_scenario()
 
         md_path, json_path = harness.generate_reports()

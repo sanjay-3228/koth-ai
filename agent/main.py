@@ -142,6 +142,7 @@ class KothAgent:
             return record
 
         # 0b. Swarm phase synchronization & HOLD gate
+        active_task = None
         if self.swarm_client:
             self.swarm_client.sync_phase()
             self.swarm_client.send_heartbeat()
@@ -160,6 +161,27 @@ class KothAgent:
                 )
                 record.build_dry_run_record(authorized=True)
                 return record
+
+            # In active phases, acquire authorized task lease if not already holding one
+            active_task = getattr(self.swarm_client, "current_task", None)
+            if not active_task:
+                task, lease = self.swarm_client.request_task()
+                active_task = task
+                if not active_task:
+                    logger.debug(f"[SWARM] No tasks available for phase {self.swarm_client.current_phase.value}. Holding.")
+                    record = ActionExecutionRecord(
+                        action_type="hold",
+                        action_name="hold",
+                        target="",
+                        model_used="swarm-task-waiting",
+                        started_at=time.time(),
+                        completed_at=time.time(),
+                        success=True,
+                        empirical_success=True,
+                        verification_result={"state": "no_tasks_available", "phase": self.swarm_client.current_phase.value},
+                    )
+                    record.build_dry_run_record(authorized=True)
+                    return record
 
         # 1. Pull telemetry and record
         telemetry = self.telemetry_poller.fetch()
@@ -231,9 +253,20 @@ class KothAgent:
         record = self.execution_gate.execute_with_gates(
             decision=effective_decision,
             context=self.context,
-            task=getattr(self.swarm_client, "current_task", None) if self.swarm_client else None,
+            task=active_task or (getattr(self.swarm_client, "current_task", None) if self.swarm_client else None),
             swarm_client=self.swarm_client,
         )
+
+        # In swarm mode, report task outcome back to coordinator
+        if self.swarm_client and active_task:
+            if record.success:
+                self.swarm_client.complete_task(result=record.to_dict())
+            else:
+                self.swarm_client.fail_task(
+                    task_id=active_task.task_id,
+                    error=record.failure_reason or "Gate rejection",
+                    retryable=False,
+                )
 
         # 7. Record verification to model router metrics (empirical success decoupled from model confidence)
         self.router.metrics.record_verification(record.empirical_success)

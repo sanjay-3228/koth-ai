@@ -17,17 +17,23 @@ from typing import Optional
 if __package__ is None or __package__ == "":
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from agent.config import ConfigProfile, config, load_config
+    from agent.actions.base import ActionContext
+    from agent.config import Config, ConfigProfile, config, load_config
+    from agent.gemini_client import Decision
     from agent.logger import setup_logging
     from agent.main import KothAgent
+    from agent.security.execution_gate import FinalExecutionGate
     from agent.swarm.client import SwarmClient
-    from agent.swarm.models import Phase
+    from agent.swarm.models import Phase, TaskType
 else:
-    from .config import ConfigProfile, config, load_config
+    from .actions.base import ActionContext
+    from .config import Config, ConfigProfile, config, load_config
+    from .gemini_client import Decision
     from .logger import setup_logging
     from .main import KothAgent
+    from .security.execution_gate import FinalExecutionGate
     from .swarm.client import SwarmClient
-    from .swarm.models import Phase
+    from .swarm.models import Phase, TaskType
 
 logger = logging.getLogger("koth.controller")
 
@@ -36,6 +42,7 @@ def run_worker_loop(
     swarm_client: SwarmClient,
     max_cycles: Optional[int] = None,
     poll_interval: float = 0.5,
+    config: Optional[Config] = None,
 ) -> int:
     """Continuous worker execution loop for multi-process swarm rehearsals."""
     stop_event = threading.Event()
@@ -55,6 +62,15 @@ def run_worker_loop(
 
     swarm_client.start_heartbeat_loop()
     cycles = 0
+
+    cfg = config or global_config
+    execution_gate = FinalExecutionGate(config=cfg)
+    action_context = ActionContext(
+        config=cfg,
+        agent_id=swarm_client.agent_id,
+        team_id=swarm_client.team_id,
+        dry_run=True,
+    )
 
     try:
         while not stop_event.is_set():
@@ -80,44 +96,86 @@ def run_worker_loop(
                     logger.info(
                         f"[{swarm_client.agent_id}] Leased task {task.task_id} for target {task.target_host} (lease {lease.lease_id})"
                     )
-                    # Simulated execution for rehearsal
-                    time.sleep(0.1)
 
-                    result = {
-                        "status": "success",
-                        "target": task.target_host,
-                        "action_type": task.task_type.value,
-                        "epoch": phase_state.phase_epoch,
-                        "simulated": True,
-                    }
-                    completed = swarm_client.complete_task(result=result)
-                    if completed:
-                        logger.info(f"[{swarm_client.agent_id}] Completed task {task.task_id}")
-                        if current_phase == Phase.ATTACK:
-                            swarm_client.update_shared_state({
-                                "scan": {
-                                    "host": task.target_host,
-                                    "ports": [22, 80],
-                                    "os": "linux",
-                                },
-                                "compromise": {
-                                    "host": task.target_host,
-                                    "agent_id": swarm_client.agent_id,
-                                },
-                                "flag": {
-                                    "flag_hash": f"flag_{swarm_client.agent_id}_{task.target_host}_{phase_state.phase_epoch}",
-                                    "agent_id": swarm_client.agent_id,
-                                    "round_id": phase_state.round_id,
-                                },
-                            })
-                        elif current_phase == Phase.DEFENSE:
-                            swarm_client.update_shared_state({
-                                "patch": {
-                                    "service_or_host": task.target_host,
-                                    "agent_id": swarm_client.agent_id,
-                                    "details": "hardened firewall & verified flag",
-                                }
-                            })
+                    # Map task to gated Decision
+                    if task.phase == Phase.ATTACK or task.task_type in (TaskType.ATTACK_SCAN, TaskType.ATTACK_EXPLOIT):
+                        if task.task_type == TaskType.ATTACK_EXPLOIT:
+                            action_type = "attack"
+                            action_name = "exploit_plugin"
+                            target = f"{task.target_host}:80" if ":" not in (task.target_host or "") else task.target_host
+                        else:
+                            action_type = "recon"
+                            action_name = "recon_scan"
+                            target = task.target_host or "10.254.254.11"
+                    else:
+                        action_type = "defend"
+                        action_name = "restart_service"
+                        target_host = task.target_host or "10.254.254.101"
+                        target = f"{target_host}:22" if ":" not in target_host else target_host
+
+                    # Optional advisory recommendation from this agent's independent LLM
+                    advisory = swarm_client.query_advisory_llm(f"Task: {task.task_id}, target: {target}, phase: {current_phase.value}")
+                    model_used = (advisory.get("model_id") or advisory.get("model_used") or "local-deterministic") if advisory else "local-deterministic"
+                    reasoning_extra = f" | Advisory: {advisory.get('reasoning_summary')}" if advisory and advisory.get("reasoning_summary") else ""
+
+                    decision = Decision(
+                        action_type=action_type,
+                        target=target,
+                        priority="HIGH",
+                        confidence=1.0,
+                        reasoning=f"Executing authorized swarm task {task.task_id} ({task.task_type.value}){reasoning_extra}",
+                        model_used=model_used,
+                    )
+                    decision.action_name = action_name
+
+                    # Execute through full 4-stage authorization gate
+                    exec_record = execution_gate.execute_with_gates(
+                        decision=decision,
+                        context=action_context,
+                        task=task,
+                        swarm_client=swarm_client,
+                    )
+
+                    if exec_record.success:
+                        result = exec_record.to_dict()
+                        completed = swarm_client.complete_task(result=result)
+                        if completed:
+                            logger.info(f"[{swarm_client.agent_id}] Completed task {task.task_id} via execution gate")
+                            if current_phase == Phase.ATTACK:
+                                swarm_client.update_shared_state({
+                                    "scan": {
+                                        "host": task.target_host,
+                                        "ports": [22, 80],
+                                        "os": "linux",
+                                    },
+                                    "compromise": {
+                                        "host": task.target_host,
+                                        "agent_id": swarm_client.agent_id,
+                                    },
+                                    "flag": {
+                                        "flag_hash": f"flag_{swarm_client.agent_id}_{task.target_host}_{phase_state.phase_epoch}",
+                                        "agent_id": swarm_client.agent_id,
+                                        "round_id": phase_state.round_id,
+                                    },
+                                })
+                            elif current_phase == Phase.DEFENSE:
+                                swarm_client.update_shared_state({
+                                    "patch": {
+                                        "service_or_host": task.target_host,
+                                        "agent_id": swarm_client.agent_id,
+                                        "details": "hardened firewall & verified flag",
+                                    }
+                                })
+                    else:
+                        logger.warning(
+                            f"[{swarm_client.agent_id}] Task {task.task_id} execution rejected by gates: "
+                            f"{exec_record.failure_reason}"
+                        )
+                        swarm_client.fail_task(
+                            task_id=task.task_id,
+                            error=exec_record.failure_reason or "Authorization gate rejection",
+                            retryable=False,
+                        )
                 else:
                     logger.debug(
                         f"[{swarm_client.agent_id}] No task available for phase {current_phase.value}"
@@ -282,6 +340,7 @@ def main() -> int:
             swarm_client=swarm_client,
             max_cycles=args.max_cycles,
             poll_interval=args.poll_interval,
+            config=config,
         )
 
     if swarm_client:
