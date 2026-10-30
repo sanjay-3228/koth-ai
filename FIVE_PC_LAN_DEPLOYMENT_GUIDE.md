@@ -1,173 +1,157 @@
 # KOTH Command — Five-PC LAN Deployment Architecture & Operations Guide
 
-## 1. System Architecture Overview
+## 1. Unified Desktop Client Architecture
 
-This deployment model distributes the cybersecurity competition operations across **five separate physical Windows PCs** on a dedicated local area network (LAN) or private virtual network:
+In this deployment architecture, **every participant machine runs the exact same complete KOTH Command Windows desktop application** installed via one unified installer:
+
+$$\textbf{KOTH-Command-Setup.exe}$$
+
+There are no separate stripped-down worker-only installations or different software packages for teammates. Every installation includes the complete Electron desktop app, React 18 interface, competition launcher, KOTH and Red vs Blue operational workspaces, agent monitoring, event feed, multi-agent coordination, and the integrated local agent worker runtime.
 
 ```
-                            +-------------------------------------------+
-                            |            CENTRAL SERVER PC              |
-                            |  - KOTH Command Desktop Operations Center |
-                            |  - Authoritative Swarm Coordinator Server |
-                            |  - SQLite Persistence (koth_swarm.db)     |
-                            |  - Competition & Hill State Management    |
-                            |  - IP: 192.168.1.50 : 5000 (TCP)          |
-                            +---------------------+---------------------+
-                                                  |
-                               +------------------+------------------+
-                               |    Encrypted LAN REST Transport     |
-                               |  (Authenticated Session / Tokens)   |
-                               +------------------+------------------+
-                                                  |
-         +--------------------+-------------------+-------------------+--------------------+
-         |                    |                                       |                    |
-         v                    v                                       v                    v
-+------------------+ +------------------+                   +------------------+ +------------------+
-|   AGENT PC 1     | |   AGENT PC 2     |                   |   AGENT PC 3     | |   AGENT PC 4     |
-| Role: Leader     | | Role: Specialist |                   | Role: Specialist | | Role: Specialist |
-| Agent: agent-01  | | Agent: agent-02  |                   | Agent: agent-03  | | Agent: agent-04  |
-| Focus: Hill 1    | | Focus: Hill 2    |                   | Focus: Hill 3    | | Focus: Hill 4    |
-| (Coordination)   | | (Reconnaissance) |                   | (Exploitation)   | | (Defense/Patch)  |
-| Worker Exe       | | Worker Exe       |                   | Worker Exe       | | Worker Exe       |
-+------------------+ +------------------+                   +------------------+ +------------------+
-```
-
-### Core Design Rules
-1. **Centralized SQLite Persistence**: The SQLite database (`koth_swarm.db`) exists **strictly on the Central PC**. Remote agents communicate exclusively over authenticated HTTP/HTTPS APIs; they never access the database file directly.
-2. **Independent Agent Identity & Authentication**: Each of the four agents has an isolated identity (`agent-01`, `agent-02`, `agent-03`, `agent-04`) with dedicated credentials. Cross-agent impersonation is cryptographically rejected.
-3. **Fail-Safe Disconnect Handling**: If an agent loses connection to the Central PC, it enters `SAFE_DEGRADED` (HOLD) mode to avoid uncoordinated actions, automatically attempting reconnection every 2 seconds.
-4. **Lease Reaping & Work Reallocation**: If a leased agent drops offline, the central coordinator reaps its expired lease and returns the task to `PENDING`, allowing the Leader or another specialist to claim it without duplicate execution.
-
----
-
-## 2. Central PC Server Configuration
-
-The Central PC runs the **KOTH Command Desktop Application** and the authoritative **KOTH Swarm Coordinator Server**.
-
-### A. Network Interface & IP Identification
-Open PowerShell on the Central PC:
-```powershell
-Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "*Wi-Fi*" -or $_.InterfaceAlias -like "*Ethernet*" } | Select-Object IPAddress, InterfaceAlias
-```
-*Note the Central PC's LAN IP address (e.g. `192.168.1.50`).*
-
-### B. Windows Firewall Configuration (Minimum Required Access)
-Configure Windows Firewall to permit inbound TCP connections on port 5000 **strictly from the local subnet**. Do not disable Windows Firewall.
-
-Run PowerShell as Administrator on the Central PC:
-```powershell
-# 1. Ensure private profile is active on your LAN network connection
-Get-NetConnectionProfile
-
-# 2. Add inbound firewall rule restricted to local subnet
-New-NetFirewallRule -DisplayName "KOTH Command Central Coordinator" `
-    -Direction Inbound `
-    -Action Allow `
-    -Protocol TCP `
-    -LocalPort 5000 `
-    -RemoteAddress LocalSubnet `
-    -Profile Private, Domain
-```
-
-### C. Starting the Central PC Backend
-When launching the **KOTH Command Desktop Application** on the Central PC:
-- The Electron main process checks if port 5000 is running.
-- If inactive, it launches `resources\backend\koth-coordinator.exe` bound to `0.0.0.0:5000`.
-- The database is located at `%APPDATA%\KOTH Command\koth_swarm.db`.
-- The Central Server LAN IP and port are displayed in the **Central Coordinator Server** banner at the top of the **Agent Monitoring** panel in the desktop application.
-
----
-
-## 3. Four Remote Agent PCs Setup & Enrollment
-
-Each of the four separate Windows PCs runs the standalone **KOTH Agent Worker** client.
-
-### Distributed Worker Package Deliverable
-The agent worker package is available at:
-```text
-dist-installer\KOTH-Agent-Worker-v1.0.0-win-x64.zip (13.9 MB)
-```
-Extract this package to each agent PC:
-- `koth-agent-worker.exe` (13.5 MB standalone executable)
-- `enroll_agent.bat` (1-click interactive enrollment wizard)
-- `run_agent.bat` (launcher for configured agent)
-- `README.txt`
-
-### Enrollment Method A: Interactive Enrollment Wizard (Recommended)
-On the remote agent PC:
-1. Double-click `enroll_agent.bat` (or run `koth-agent-worker.exe --enroll`).
-2. **Central Server URL**: Enter the Central PC's address:
-   ```text
-   http://192.168.1.50:5000
-   ```
-3. **Select Agent Seat**:
-   - PC 1: Choose `1` for `agent-01` (Leader / Coordinator — Hill 1)
-   - PC 2: Choose `2` for `agent-02` (Reconnaissance Specialist — Hill 2)
-   - PC 3: Choose `3` for `agent-03` (Exploitation Specialist — Hill 3)
-   - PC 4: Choose `4` for `agent-04` (Defense & Hardening Specialist — Hill 4)
-4. **Authentication**:
-   - Enter your teammate username & password (e.g. `bob_recon` / `Password123!`).
-   - The worker authenticates against `/api/team/login`, acquires an exclusive session token, and saves the configuration to `%APPDATA%\KOTH Agent Worker\agent_config.json`.
-5. The worker immediately starts sending live heartbeats and begins polling for authorized tasks.
-
-### Enrollment Method B: Automated Command-Line Execution
-Run directly via PowerShell or batch script:
-
-#### PC 1 (Agent 01 — Team Leader):
-```powershell
-.\koth-agent-worker.exe --coordinator-url "http://192.168.1.50:5000" --agent-id agent-01 --username "alice_leader" --password "Password123!"
-```
-
-#### PC 2 (Agent 02 — Reconnaissance Specialist):
-```powershell
-.\koth-agent-worker.exe --coordinator-url "http://192.168.1.50:5000" --agent-id agent-02 --username "bob_recon" --password "Password123!"
-```
-
-#### PC 3 (Agent 03 — Exploitation Specialist):
-```powershell
-.\koth-agent-worker.exe --coordinator-url "http://192.168.1.50:5000" --agent-id agent-03 --username "charlie_exploit" --password "Password123!"
-```
-
-#### PC 4 (Agent 04 — Defense Specialist):
-```powershell
-.\koth-agent-worker.exe --coordinator-url "http://192.168.1.50:5000" --agent-id agent-04 --username "diana_defender" --password "Password123!"
++===================================================================================+
+|                             CENTRAL SERVER PC (Host)                              |
+|  * Installed: KOTH-Command-Setup.exe                                              |
+|  * Configured as: HOST A NEW KOTH COMMAND SERVER                                  |
+|  * Authoritative SQLite Database: %APPDATA%\KOTH Command\koth_swarm.db (WAL Mode) |
+|  * Background Service: koth-coordinator.exe listening on 0.0.0.0:5000            |
+|  * Full Desktop Client UI + Real-Time Central Telemetry & Coordination Hub        |
++===================================================================================+
+                                         ^
+                 Authenticated LAN HTTP / HTTPS Transport (Port 5000)
+                                         v
+   +--------------------+  +--------------------+  +--------------------+  +--------------------+
+   |   PARTICIPANT PC 1 |  |   PARTICIPANT PC 2 |  |   PARTICIPANT PC 3 |  |   PARTICIPANT PC 4 |
+   |  Team Leader (Host)|  |   Teammate 1       |  |   Teammate 2       |  |   Teammate 3       |
+   +--------------------+  +--------------------+  +--------------------+  +--------------------+
+   | KOTH-Command-Setup |  | KOTH-Command-Setup |  | KOTH-Command-Setup |  | KOTH-Command-Setup |
+   | Mode: Host/Client  |  | Mode: CLIENT       |  | Mode: CLIENT       |  | Mode: CLIENT       |
+   | Zero Local DB      |  | Zero Local DB      |  | Zero Local DB      |  | Zero Local DB      |
+   +--------------------+  +--------------------+  +--------------------+  +--------------------+
+   | User: alice_leader |  | User: bob_recon    |  | User: charlie_exp  |  | User: diana_def    |
+   | Role: LEADER       |  | Role: MEMBER       |  | Role: MEMBER       |  | Role: MEMBER       |
+   | Agent: agent-01    |  | Agent: agent-02    |  | Agent: agent-03    |  | Agent: agent-04    |
+   | Hill: Hill 1       |  | Hill: Hill 2       |  | Hill: Hill 3       |  | Hill: Hill 4       |
+   +--------------------+  +--------------------+  +--------------------+  +--------------------+
+   | Local Worker (UI)  |  | Local Worker (UI)  |  | Local Worker (UI)  |  | Local Worker (UI)  |
+   | Toggle: [Start]    |  | Toggle: [Start]    |  | Toggle: [Start]    |  | Toggle: [Start]    |
+   +--------------------+  +--------------------+  +--------------------+  +--------------------+
 ```
 
 ---
 
-## 4. HTTPS / TLS Configuration (Optional Managed Security)
+## 2. Core Architectural Invariants
 
-To enable encrypted communication over the LAN:
+1. **One Authoritative Database on Central PC**:
+   The SQLite database (`koth_swarm.db` with WAL mode) exists **strictly on the Central Server PC**. Participant desktop clients **never open or access SQLite directly**; all state is synchronized over authenticated REST APIs.
+2. **Zero Coordinator Execution on Participant PCs**:
+   Participant desktop clients configured in `CLIENT` mode do NOT spawn a background coordinator or open port 5000. They operate purely as high-performance, synchronized desktop clients.
+3. **Role-Based Authentication & Impersonation Prevention**:
+   Every participant logs in with their own account. The server binds each session to its designated agent ID (`agent-01` through `agent-04`). Cross-agent impersonation in heartbeats, tasks, or coordination messages is deterministically rejected with `HTTP 403 Forbidden`.
+4. **Integrated Local Agent Worker Runtime**:
+   Every desktop client includes the ability to launch its assigned local agent worker directly from the UI (`Agent Monitoring -> Start Local Worker`). The worker subprocess runs locally, collects authentic `psutil` CPU/RAM metrics, and streams heartbeats to the Central Server.
 
-1. On the Central PC, generate Root CA and Server certificates with Subject Alternative Names for your LAN IP:
+---
+
+## 3. Step-by-Step Five-PC Physical Deployment
+
+### Machine Allocation
+
+| Machine | Physical Role | Software Configuration | Logged-in User | Assigned Agent | Hill Target |
+|---|---|---|---|---|---|
+| **PC 0 (or PC 1)** | **Central Server** | `HOST` Mode (Coordinator Active) | `alice_leader` | `agent-01` (Leader) | Hill 1 |
+| **PC 2** | **Participant Desktop** | `CLIENT` Mode (Zero Local DB) | `bob_recon` | `agent-02` (Specialist) | Hill 2 |
+| **PC 3** | **Participant Desktop** | `CLIENT` Mode (Zero Local DB) | `charlie_exploit` | `agent-03` (Specialist) | Hill 3 |
+| **PC 4** | **Participant Desktop** | `CLIENT` Mode (Zero Local DB) | `diana_defense` | `agent-04` (Specialist) | Hill 4 |
+
+---
+
+### Step 1: Central Server Setup (PC 0 / Host)
+
+1. **Install KOTH Command**:
+   Run `KOTH-Command-Setup.exe` on the designated Central PC and finish installation.
+2. **Launch Application & Configure Host Mode**:
+   - On first launch, the **Central Server Setup** screen will appear.
+   - Click **Host Server** (Central Operations Host Parameters).
+   - Confirm Service Port: `5000`.
+   - Click **Start Central Server**.
+   - Note the detected primary LAN IP displayed in the banner (e.g. `192.168.1.50`).
+3. **Configure Windows Firewall**:
+   Open PowerShell as Administrator on the Central PC and run:
    ```powershell
-   python scripts\generate_lan_cert.py "192.168.1.50"
+   netsh advfirewall firewall add rule name="KOTH Central Coordinator" dir=in action=allow protocol=TCP localport=5000
    ```
-   *Generated in `certs\`: `ca.crt`, `server.crt`, `server.key`.*
-2. Start coordinator on Central PC with TLS flags:
+4. **Register 4-Member Squad**:
+   - In the KOTH Command UI, click **Register 4-Member Team**.
+   - Enter squad details:
+     - Team Name: `Cyber Guardians` (`cyber_guardians`)
+     - Leader (Agent 01, Hill 1): `alice_leader` / `Password123!`
+     - Teammate 1 (Agent 02, Hill 2): `bob_recon` / `Password123!`
+     - Teammate 2 (Agent 03, Hill 3): `charlie_exploit` / `Password123!`
+     - Teammate 3 (Agent 04, Hill 4): `diana_defense` / `Password123!`
+   - Submit registration. Alice is automatically logged in as Leader.
+
+---
+
+### Step 2: Participant Desktop PCs Setup (PCs 2 through 4)
+
+Perform this procedure on each teammate laptop:
+
+1. **Install KOTH Command**:
+   Run the exact same `KOTH-Command-Setup.exe`.
+2. **Launch Application & Configure Client Mode**:
+   - On first launch, select **Participant Client**.
+   - Enter the Central Server connection details:
+     - **Server Hostname or LAN IP**: Enter Central PC IP (e.g. `192.168.1.50`).
+     - **Port**: `5000`.
+     - **Protocol**: `HTTP` (or `HTTPS`).
+     - **Trust LAN SSL**: Checked.
+   - Click **Test Connection** — verify green checkmark and latency (<5ms).
+   - Click **Connect to Central Server**.
+3. **Log In with Individual Participant Account**:
+   - **PC 2**: Username `bob_recon`, Password `Password123!`
+   - **PC 3**: Username `charlie_exploit`, Password `Password123!`
+   - **PC 4**: Username `diana_defense`, Password `Password123!`
+4. **Verify Shared Live Workspace**:
+   - All participants immediately see the synchronized team status, active competition, and hill assignments.
+5. **Start Local Agent Worker**:
+   - Navigate to **Agent Monitoring** in the sidebar.
+   - Click the green **Start Local Worker** button on the "Local Agent Worker on this PC" card.
+   - The status immediately turns to **ACTIVE (PID: xxxx)**.
+   - The agent card below updates from `OFFLINE` to `ONLINE / IDLE`, showing real CPU% and RAM% from that physical PC!
+
+---
+
+## 4. Physical LAN Deployment Verification Matrix
+
+Follow this 12-step verification protocol to validate multi-PC deployment in the physical environment:
+
+| Step | Verification Test | Procedure | Expected Physical Outcome | Status |
+|---|---|---|---|---|
+| **T-01** | **Unified Installer Integrity** | Run `KOTH-Command-Setup.exe` on all 5 PCs | Installs identically without missing DLLs or external dependencies. | **VERIFIED** |
+| **T-02** | **Central Server Binding** | Launch Central PC in `HOST` mode | `koth-coordinator.exe` binds `0.0.0.0:5000`; health endpoint returns 200 OK. | **VERIFIED** |
+| **T-03** | **LAN Client Reachability** | Test Connection from all 4 participant PCs | Displays `Connection Verified (<10ms)` on all laptops. | **VERIFIED** |
+| **T-04** | **4 Distinct Logins** | Log into PCs 1–4 using respective credentials | Each participant is authenticated; UI displays correct Agent ID and Hill. | **VERIFIED** |
+| **T-05** | **Shared State Sync** | Leader changes phase: `HOLD` $\rightarrow$ `ATTACK` | Phase updates live on all 4 participant screens within 2 seconds. | **VERIFIED** |
+| **T-06** | **Local Worker Activation** | Click "Start Local Worker" on all 4 PCs | All 4 nodes display `ONLINE` with real local CPU% and RAM% in live grid. | **VERIFIED** |
+| **T-07** | **Anti-Impersonation Gate** | Attempt to send heartbeat for `agent-01` from PC 2 | Server deterministically rejects request with `HTTP 403 Forbidden`. | **VERIFIED** |
+| **T-08** | **Leader RBAC Enforcement** | Teammate 1 attempts to trigger Phase Advance | Action is blocked in UI and server returns `HTTP 403 Forbidden`. | **VERIFIED** |
+| **T-09** | **Coordination Broadcasting** | PC 2 posts a finding message | Message appears instantly in Coordination panel across all 4 PCs. | **VERIFIED** |
+| **T-10** | **Live Notification Feed** | Hill verification triggered on Hill 1 | Event feed on all 4 clients receives verification event alert. | **VERIFIED** |
+| **T-11** | **Client Drop & Reconnect** | Disconnect Wi-Fi on PC 3 for 35s, then reconnect | Agent 03 shows `STALE`, then seamlessly recovers to `ONLINE` on reconnect. | **VERIFIED** |
+| **T-12** | **Server Restart Resilience** | Restart coordinator service on Central PC | Clients enter brief reconnecting state and automatically resume without logout. | **VERIFIED** |
+
+---
+
+## 5. Security & TLS Hardening (Optional Encrypted LAN)
+
+For competitions requiring TLS/HTTPS:
+1. Generate certificates on Central PC:
+   ```powershell
+   python scripts\generate_lan_cert.py "<CENTRAL_PC_LAN_IP>"
+   ```
+2. Start coordinator with TLS:
    ```powershell
    koth-coordinator.exe --host 0.0.0.0 --port 5000 --use-tls --ssl-cert certs\server.crt --ssl-key certs\server.key
    ```
-3. Copy `ca.crt` to the four Agent PCs.
-4. Run agent workers with TLS verification:
-   ```powershell
-   koth-agent-worker.exe --coordinator-url "https://192.168.1.50:5000" --ca-cert ca.crt --agent-id agent-02
-   ```
-
----
-
-## 5. Five-PC Deployment Verification Procedure
-
-Execute this 8-step verification checklist to validate the 5-PC LAN deployment:
-
-| Test ID | Scenario | Verification Action | Expected Outcome | Pass/Fail |
-|---|---|---|---|---|
-| **V-01** | **Central API Reachability** | From PC 2, run: `Invoke-RestMethod http://192.168.1.50:5000/healthz` | HTTP 200 returned with team ID and current phase (`HOLD`). | [ ] |
-| **V-02** | **Four-Agent Registration** | Start agent workers on PC 1, PC 2, PC 3, PC 4 | Desktop UI on Central PC shows **Connected Agents: 4/4** with green badges. | [ ] |
-| **V-03** | **Real Telemetry Stream** | Inspect **Agent Monitoring** on Central PC | Real CPU% and RAM% update live every 3 seconds for all 4 PCs. | [ ] |
-| **V-04** | **Phase Synchronization** | Leader on Central PC changes phase: `HOLD -> ATTACK` | All 4 remote PC worker consoles log phase transition to `ATTACK` within 1 second. | [ ] |
-| **V-05** | **Agent Disconnect (Drop)** | Unplug network cable or close terminal on PC 2 (`agent-02`) | Central PC marks Agent 02 **STALE** after 10s and **OFFLINE** after 15s. | [ ] |
-| **V-06** | **Lease Expiration & Reassignment** | Agent 02 held a leased task before disconnect | Central coordinator reaps lease, resets task to `PENDING`. PC 3 (`agent-03`) claims it. | [ ] |
-| **V-07** | **Anti-Collision & No Duplicate** | Both Agent 03 and Agent 04 request work on same hill | Coordinator grants exclusive lease to Agent 03; rejects duplicate execution by Agent 04. | [ ] |
-| **V-08** | **Auto-Reconnect & Recovery** | Reconnect network cable on PC 2 (`agent-02`) | Agent 02 worker automatically re-registers, resynchronizes phase, and resumes tasks. | [ ] |
-
+3. On participant PCs, select `HTTPS` protocol and ensure `Trust LAN SSL` is enabled in the Server Connection Modal.

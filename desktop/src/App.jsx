@@ -18,11 +18,48 @@ import RedVsBlueWorkspace from './components/RedVsBlueWorkspace';
 import CompetitionLauncher from './components/CompetitionLauncher';
 import NotificationFeed from './components/NotificationFeed';
 import MultiAgentCoordinationView from './components/MultiAgentCoordinationView';
+import ServerConnectionModal from './components/ServerConnectionModal';
 
 export default function App() {
   const [coordinatorUrl, setCoordinatorUrl] = useState(() => {
     return (window.kothDesktop && window.kothDesktop.backendUrl) || 'http://127.0.0.1:5000';
   });
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [isFirstLaunch, setIsFirstLaunch] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const initConfig = async () => {
+      try {
+        if (window.kothDesktop && window.kothDesktop.getClientConfig) {
+          const cfg = await window.kothDesktop.getClientConfig();
+          if (cfg && isMounted) {
+            const proto = cfg.serverProtocol || 'http';
+            const h = cfg.serverHost || '127.0.0.1';
+            const p = cfg.serverPort || 5000;
+            setCoordinatorUrl(`${proto}://${h}:${p}`);
+            if (!cfg.configured) {
+              setIsFirstLaunch(true);
+              setIsServerModalOpen(true);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to init client config:', e);
+      }
+    };
+    initConfig();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleSaveServerConfig = (newConfig, targetUrl) => {
+    setCoordinatorUrl(targetUrl);
+    setIsServerModalOpen(false);
+    setIsFirstLaunch(false);
+    if (token) {
+      fetchData();
+    }
+  };
   const [token, setToken] = useState(() => sessionStorage.getItem('koth_desktop_token') || '');
   const [user, setUser] = useState(() => {
     try {
@@ -509,12 +546,22 @@ export default function App() {
   // --------------------------------------------------------------------------
   if (appLayer === 'launcher') {
     return (
-      <CompetitionLauncher
-        coordinatorUrl={coordinatorUrl}
-        headers={headers}
-        user={user}
-        onLaunchWorkspace={handleLaunchWorkspace}
-      />
+      <>
+        <CompetitionLauncher
+          coordinatorUrl={coordinatorUrl}
+          headers={headers}
+          user={user}
+          onLaunchWorkspace={handleLaunchWorkspace}
+          onOpenServerModal={() => setIsServerModalOpen(true)}
+        />
+        <ServerConnectionModal
+          isOpen={isServerModalOpen}
+          isFirstLaunch={isFirstLaunch}
+          onClose={() => setIsServerModalOpen(false)}
+          currentUrl={coordinatorUrl}
+          onSaveConfig={handleSaveServerConfig}
+        />
+      </>
     );
   }
 
@@ -523,28 +570,38 @@ export default function App() {
   // --------------------------------------------------------------------------
   if (appLayer === 'auth' || !token || !user) {
     return (
-      <AuthView
-        coordinatorUrl={coordinatorUrl}
-        setCoordinatorUrl={setCoordinatorUrl}
-        authMode={authMode}
-        setAuthMode={setAuthMode}
-        authError={authError}
-        setAuthError={setAuthError}
-        loginUsername={loginUsername}
-        setLoginUsername={setLoginUsername}
-        loginPassword={loginPassword}
-        setLoginPassword={setLoginPassword}
-        teamId={teamId}
-        setTeamId={setTeamId}
-        teamName={teamName}
-        setTeamName={setTeamName}
-        teamRegData={teamRegData}
-        setTeamRegData={setTeamRegData}
-        onLogin={handleLogin}
-        onRegisterTeam={handleRegisterFourMemberTeam}
-        onJoinTeam={handleJoinTeam}
-        onBackToLauncher={handleExitToLauncher}
-      />
+      <>
+        <AuthView
+          coordinatorUrl={coordinatorUrl}
+          setCoordinatorUrl={setCoordinatorUrl}
+          authMode={authMode}
+          setAuthMode={setAuthMode}
+          authError={authError}
+          setAuthError={setAuthError}
+          loginUsername={loginUsername}
+          setLoginUsername={setLoginUsername}
+          loginPassword={loginPassword}
+          setLoginPassword={setLoginPassword}
+          teamId={teamId}
+          setTeamId={setTeamId}
+          teamName={teamName}
+          setTeamName={setTeamName}
+          teamRegData={teamRegData}
+          setTeamRegData={setTeamRegData}
+          onLogin={handleLogin}
+          onRegisterTeam={handleRegisterFourMemberTeam}
+          onJoinTeam={handleJoinTeam}
+          onBackToLauncher={handleExitToLauncher}
+          onOpenServerModal={() => setIsServerModalOpen(true)}
+        />
+        <ServerConnectionModal
+          isOpen={isServerModalOpen}
+          isFirstLaunch={isFirstLaunch}
+          onClose={() => setIsServerModalOpen(false)}
+          currentUrl={coordinatorUrl}
+          onSaveConfig={handleSaveServerConfig}
+        />
+      </>
     );
   }
 
@@ -555,16 +612,25 @@ export default function App() {
   // A. Red Team vs Blue Team Operational Workspace
   if (activeCompetition?.mode === 'RED_VS_BLUE') {
     return (
-      <RedVsBlueWorkspace
-        coordinatorUrl={coordinatorUrl}
-        headers={headers}
-        user={user}
-        competition={activeCompetition}
-        swarmStatus={swarmStatus}
-        teamId={teamId}
-        onRefreshCompetition={fetchData}
-        onExitToLauncher={handleExitToLauncher}
-      />
+      <>
+        <RedVsBlueWorkspace
+          coordinatorUrl={coordinatorUrl}
+          headers={headers}
+          user={user}
+          competition={activeCompetition}
+          swarmStatus={swarmStatus}
+          teamId={teamId}
+          onRefreshCompetition={fetchData}
+          onExitToLauncher={handleExitToLauncher}
+        />
+        <ServerConnectionModal
+          isOpen={isServerModalOpen}
+          isFirstLaunch={isFirstLaunch}
+          onClose={() => setIsServerModalOpen(false)}
+          currentUrl={coordinatorUrl}
+          onSaveConfig={handleSaveServerConfig}
+        />
+      </>
     );
   }
 
@@ -595,11 +661,13 @@ export default function App() {
           swarmStatus={swarmStatus}
           isOffline={isOffline}
           lastSync={lastSync}
+          coordinatorUrl={coordinatorUrl}
           onRefresh={fetchData}
           onTriggerEmergencyStop={() => setIsEmergencyModalOpen(true)}
           onResetEmergencyStop={handleResetEmergencyStop}
           onLogout={handleLogout}
           onExitToLauncher={handleExitToLauncher}
+          onOpenServerModal={() => setIsServerModalOpen(true)}
         />
 
         {/* View Content Scroll Area */}
@@ -737,6 +805,15 @@ export default function App() {
         onClose={() => setIsEmergencyModalOpen(false)}
         onConfirm={handleEmergencyStop}
         user={user}
+      />
+
+      {/* Central Server Connection & Setup Modal */}
+      <ServerConnectionModal
+        isOpen={isServerModalOpen}
+        isFirstLaunch={isFirstLaunch}
+        onClose={() => setIsServerModalOpen(false)}
+        currentUrl={coordinatorUrl}
+        onSaveConfig={handleSaveServerConfig}
       />
     </div>
   );

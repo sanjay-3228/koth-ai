@@ -96,6 +96,7 @@ class TeamManager:
         """Initialize team, member, session, and hill tables with safe migration."""
         with self._get_connection() as conn:
             cur = conn.cursor()
+            cur.execute("PRAGMA journal_mode = WAL")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS teams (

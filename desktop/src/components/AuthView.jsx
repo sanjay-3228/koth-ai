@@ -22,6 +22,7 @@ export default function AuthView({
   onRegisterTeam,
   onJoinTeam,
   onBackToLauncher,
+  onOpenServerModal,
 }) {
   const [regStep, setRegStep] = useState('section_a');
 
@@ -103,6 +104,37 @@ export default function AuthView({
               King-of-the-Hill Swarm Operations Center
             </div>
           </div>
+        </div>
+
+        {/* Server Target Pill */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'var(--bg-main)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 6,
+            padding: '6px 10px',
+            marginBottom: 16,
+          }}
+        >
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            Coordinator:{' '}
+            <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+              {coordinatorUrl ? coordinatorUrl.replace(/^https?:\/\//, '') : '127.0.0.1:5000'}
+            </strong>
+          </span>
+          {onOpenServerModal && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-xs"
+              onClick={onOpenServerModal}
+              style={{ fontSize: 11, padding: '2px 8px' }}
+            >
+              Change Server
+            </button>
+          )}
         </div>
 
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 20 }}>

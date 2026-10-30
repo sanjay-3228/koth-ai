@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, RefreshCw, LogOut, ShieldAlert, ArrowLeft, Bell } from 'lucide-react';
+import { AlertTriangle, RefreshCw, LogOut, ShieldAlert, ArrowLeft, Bell, Server } from 'lucide-react';
 
 export default function Header({
   activeView,
@@ -9,12 +9,14 @@ export default function Header({
   swarmStatus,
   isOffline,
   lastSync,
+  coordinatorUrl,
   onRefresh,
   onTriggerEmergencyStop,
   onResetEmergencyStop,
   onLogout,
   onExitToLauncher,
   onNavigate,
+  onOpenServerModal,
 }) {
   const isLeader = user?.role === 'LEADER';
   const killSwitchActive = swarmStatus?.kill_switch || false;
@@ -101,6 +103,39 @@ export default function Header({
           >
             <AlertTriangle size={13} />
             <span>Emergency Stop</span>
+          </button>
+        )}
+
+        {/* Server Connection Pill */}
+        {onOpenServerModal && (
+          <button
+            type="button"
+            onClick={onOpenServerModal}
+            className="btn btn-sm"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#F1F5F9',
+              border: '1px solid #CBD5E1',
+              borderRadius: 6,
+              fontSize: 12,
+              padding: '4px 8px',
+            }}
+            title="Click to view or change central server connection"
+          >
+            <Server size={12} color="#1E293B" />
+            <span style={{ fontFamily: 'monospace' }}>
+              {coordinatorUrl ? coordinatorUrl.replace(/^https?:\/\//, '') : '127.0.0.1:5000'}
+            </span>
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                backgroundColor: isOffline ? 'var(--status-critical)' : 'var(--status-success)',
+              }}
+            />
           </button>
         )}
 

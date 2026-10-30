@@ -26,9 +26,68 @@ export default function AgentMonitoringView({ swarmStatus, user, coordinatorUrl,
   const [networkInfo, setNetworkInfo] = useState(null);
   const [showLanDetails, setShowLanDetails] = useState(false);
   const [copiedKey, setCopiedKey] = useState('');
+  const [localWorkerStatus, setLocalWorkerStatus] = useState(null);
+  const [workerActionLoading, setWorkerActionLoading] = useState(false);
+  const [workerActionError, setWorkerActionError] = useState('');
 
   const agents = swarmStatus?.agents || {};
   const agentList = ['agent-01', 'agent-02', 'agent-03', 'agent-04'];
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchWorkerStatus = async () => {
+      try {
+        if (window.kothDesktop && window.kothDesktop.getLocalWorkerStatus) {
+          const st = await window.kothDesktop.getLocalWorkerStatus();
+          if (isMounted) setLocalWorkerStatus(st);
+        }
+      } catch {}
+    };
+    fetchWorkerStatus();
+    const interval = setInterval(fetchWorkerStatus, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleStartLocalWorker = async () => {
+    if (!window.kothDesktop || !window.kothDesktop.startLocalWorker) return;
+    setWorkerActionLoading(true);
+    setWorkerActionError('');
+    try {
+      const res = await window.kothDesktop.startLocalWorker({
+        coordinatorUrl: coordinatorUrl || 'http://127.0.0.1:5000',
+        agentId: user?.agent_id || 'agent-02',
+        teamId: user?.team_id || 'null_warriors',
+        sessionToken: sessionStorage.getItem('koth_desktop_token') || '',
+      });
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to start local worker');
+      }
+      const st = await window.kothDesktop.getLocalWorkerStatus();
+      setLocalWorkerStatus(st);
+    } catch (err) {
+      setWorkerActionError(err.message);
+    } finally {
+      setWorkerActionLoading(false);
+    }
+  };
+
+  const handleStopLocalWorker = async () => {
+    if (!window.kothDesktop || !window.kothDesktop.stopLocalWorker) return;
+    setWorkerActionLoading(true);
+    setWorkerActionError('');
+    try {
+      await window.kothDesktop.stopLocalWorker();
+      const st = await window.kothDesktop.getLocalWorkerStatus();
+      setLocalWorkerStatus(st);
+    } catch (err) {
+      setWorkerActionError(err.message);
+    } finally {
+      setWorkerActionLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -271,6 +330,106 @@ export default function AgentMonitoringView({ swarmStatus, user, coordinatorUrl,
           </div>
         )}
       </div>
+
+      {/* Local Agent Worker Runtime for Current Participant PC */}
+      {user?.agent_id && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 20,
+            border: localWorkerStatus?.running ? '2px solid var(--status-success)' : '1px solid var(--border-color)',
+            background: localWorkerStatus?.running ? '#F4FBF7' : '#FFFFFF',
+            padding: '16px 20px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 8,
+                  backgroundColor: localWorkerStatus?.running ? 'rgba(22, 163, 106, 0.15)' : 'var(--bg-light-blue)',
+                  color: localWorkerStatus?.running ? 'var(--status-success)' : 'var(--accent-interactive-blue)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Radio size={20} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                    Local Agent Worker on this PC
+                  </span>
+                  <span className="badge badge-blue">
+                    {user.agent_id} ({user.role === 'LEADER' ? 'Leader' : 'Specialist'})
+                  </span>
+                  <span className="badge badge-neutral">
+                    Hill {user.assigned_hill || user.hill_id || '1'}
+                  </span>
+                  {localWorkerStatus?.running ? (
+                    <span className="badge badge-green">
+                      <span className="dot dot-green" /> ACTIVE (PID: {localWorkerStatus.pid})
+                    </span>
+                  ) : (
+                    <span className="badge badge-neutral">
+                      <span className="dot dot-neutral" /> STOPPED / STANDBY
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  {localWorkerStatus?.running
+                    ? 'Subprocess active: collecting local CPU/RAM telemetry, streaming heartbeats, and polling authorized hill tasks.'
+                    : 'Start the worker to connect this PC to the swarm and begin telemetry and task execution for your assigned hill.'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {workerActionError && (
+                <span style={{ fontSize: 12, color: 'var(--status-critical)' }}>
+                  {workerActionError}
+                </span>
+              )}
+              {window.kothDesktop?.openLogsFolder && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => window.kothDesktop.openLogsFolder()}
+                  title="Open application logs directory"
+                >
+                  Logs
+                </button>
+              )}
+              {localWorkerStatus?.running ? (
+                <button
+                  type="button"
+                  className="btn-outline-danger btn-sm"
+                  onClick={handleStopLocalWorker}
+                  disabled={workerActionLoading}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  {workerActionLoading ? <RefreshCw size={13} className="spin" /> : <XCircle size={13} />}
+                  Stop Local Worker
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-success btn-sm"
+                  onClick={handleStartLocalWorker}
+                  disabled={workerActionLoading}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  {workerActionLoading ? <RefreshCw size={13} className="spin" /> : <Activity size={13} />}
+                  Start Local Worker ({user.agent_id})
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Grid of 4 Agent Cards */}
       <div className="grid-4" style={{ marginBottom: 20 }}>

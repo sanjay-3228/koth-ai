@@ -87,17 +87,21 @@ Test-NetConnection -ComputerName 192.168.1.50 -Port 5000
 ```
 Expected: `TcpTestSucceeded : True`.
 
-### Step 2: Configure and Start Agent Worker (Standalone Executable or Python)
-Each teammate executes their assigned agent worker process using either the standalone binary `koth-agent-worker.exe` (from `KOTH-Agent-Worker-v1.0.0-win-x64.zip`) or python:
+### Step 2: Connect via Unified KOTH Command Desktop Application (Recommended)
+Every teammate simply installs and runs `KOTH-Command-Setup.exe`:
+1. On first launch, select **Participant Client**.
+2. Enter Central Server Host: `192.168.1.50`, Port: `5000`.
+3. Click **Connect to Central Server**.
+4. Log in using your assigned teammate username and password (e.g. `bob_recon` / `Password123!`).
+5. In **Agent Monitoring**, click the green **Start Local Worker** button on the "Local Agent Worker on this PC" card.
+6. The desktop client automatically launches the local worker in the background, connects to the central coordinator, and streams authentic CPU/RAM metrics!
 
-#### Option A: Interactive Wizard (Easiest)
-Run `enroll_agent.bat` or:
-```powershell
-.\koth-agent-worker.exe --enroll
-```
-Enter the coordinator IP (`http://192.168.1.50:5000`) and member login credentials.
+---
 
-#### Option B: Standalone Binary Execution
+### Step 2-B: Standalone CLI Worker Execution (Alternative Headless Method)
+If a teammate prefers running the worker in a separate terminal or headless environment:
+Run `koth-agent-worker.exe` with your credentials:
+
 ##### Teammate 1 (PC 2 / agent-02 - Recon Specialist):
 ```powershell
 .\koth-agent-worker.exe --coordinator-url "http://192.168.1.50:5000" --agent-id agent-02 --username "bob_recon" --password "Password123!"
@@ -110,7 +114,7 @@ Enter the coordinator IP (`http://192.168.1.50:5000`) and member login credentia
 
 ##### Teammate 3 (PC 4 / agent-04 - Defense Specialist):
 ```powershell
-.\koth-agent-worker.exe --coordinator-url "http://192.168.1.50:5000" --agent-id agent-04 --username "diana_defender" --password "Password123!"
+.\koth-agent-worker.exe --coordinator-url "http://192.168.1.50:5000" --agent-id agent-04 --username "diana_defense" --password "Password123!"
 ```
 
 ---

@@ -25,6 +25,7 @@ export default function CompetitionLauncher({
   headers,
   user,
   onLaunchWorkspace,
+  onOpenServerModal,
 }) {
   // Navigation states: 'landing' | 'format_select' | 'wizard' | 'lobby' | 'join_modal'
   const [screen, setScreen] = useState('landing');
@@ -159,6 +160,33 @@ export default function CompetitionLauncher({
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-main)', padding: '36px 20px' }}>
       <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+        {/* Top Server Connection Badge */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          {onOpenServerModal && (
+            <button
+              type="button"
+              onClick={onOpenServerModal}
+              className="btn btn-sm"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: 6,
+                fontSize: 12,
+                padding: '4px 10px',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+              }}
+              title="Configure Central Server Connection"
+            >
+              <Server size={13} color="var(--accent-interactive-blue)" />
+              <span>Coordinator: <strong style={{ fontFamily: 'monospace' }}>{coordinatorUrl ? coordinatorUrl.replace(/^https?:\/\//, '') : '127.0.0.1:5000'}</strong></span>
+            </button>
+          )}
+        </div>
+
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <div

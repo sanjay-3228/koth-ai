@@ -1,14 +1,19 @@
 # KOTH Command & KOTH Swarm
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20(x64)-blue.svg)](#)
-[![Tests](https://img.shields.io/badge/tests-34%2F34%20passing-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-43%2F43%20passing-brightgreen.svg)](#)
 [![Frontend](https://img.shields.io/badge/desktop-Electron%20%7C%20React%2018%20%7C%20Vite-6BADEB.svg)](#)
 [![Backend](https://img.shields.io/badge/backend-Python%203.13%20%7C%20FastAPI%20%7C%20SQLite%20WAL-172536.svg)](#)
-[![Architecture](https://img.shields.io/badge/architecture-Central%20PC%20%2B%204%20Remote%20Worker%20PCs-2878C8.svg)](#)
+[![Architecture](https://img.shields.io/badge/architecture-Central%20Server%20%2B%20Unified%20Participant%20Desktops-2878C8.svg)](#)
 
-**KOTH Command** is a production-grade cybersecurity operations platform and autonomous multi-agent swarm orchestration center designed for **King of the Hill (KOTH)** and **Red Team vs Blue Team** attack/defense competitions.
+**KOTH Command** is an enterprise cybersecurity operations platform and autonomous multi-agent swarm orchestration center designed for **King of the Hill (KOTH)** and **Red Team vs Blue Team** attack/defense competitions.
 
-The platform provides an authoritative central command system and supports a distributed **Five-PC Local Area Network (LAN)** deployment: one Central Operations PC and four dedicated Remote Agent Worker PCs operating with synchronized role-based authority, real-time telemetry, and deterministic security gates.
+The platform provides a **Unified Full Desktop Client Architecture for every team member**:
+- Every participant, including the team leader and all teammates, installs the **exact same complete KOTH Command Windows desktop application** (`KOTH-Command-Setup.exe`).
+- **Central Server PC**: Hosts the authoritative coordinator engine (`koth-coordinator.exe`) and centralized SQLite database (`koth_swarm.db` with WAL mode) on `0.0.0.0:5000`.
+- **Participant Desktop PCs**: Connect over LAN to the central server. Never access SQLite directly.
+- **Role-Based Accounts & Anti-Impersonation**: Each participant logs into their individual account; the backend binds each session to its authorized agent identity (`agent-01` to `agent-04`) and target hill.
+- **Integrated Local Agent Worker**: Each desktop client can run its assigned local worker directly from the UI with a single click, streaming authentic `psutil` hardware telemetry and executing authorized tasks.
 
 ---
 
@@ -198,55 +203,58 @@ KOTH Command includes pre-compiled, production-ready executables for 64-bit Wind
 
 | Deliverable | Location | Size | Target Host | Description |
 |---|---|---|---|---|
-| **KOTH Command Desktop Installer** | `dist-installer/KOTH-Command-Setup.exe` | ~97.1 MB | **Central PC** | Official NSIS Windows desktop installer bundling the Electron UI and `koth-coordinator.exe`. |
-| **Agent Worker Package** | `dist-installer/KOTH-Agent-Worker-v1.0.0-win-x64.zip` | ~13.9 MB | **Remote PCs (1–4)** | Self-contained ZIP containing `koth-agent-worker.exe`, enrollment wizard, and startup batch files. |
+| **KOTH Command Unified Desktop Installer** | `dist-installer/KOTH-Command-Setup.exe` | 110.2 MB | **All PCs** | Official NSIS Windows desktop installer for Central Server and all Participant Client PCs. Bundles both coordinator and agent worker. |
+| **Agent Worker Package** | `dist-installer/KOTH-Agent-Worker-v1.0.0-win-x64.zip` | ~13.9 MB | **Headless PCs** | Standalone ZIP containing `koth-agent-worker.exe`, enrollment wizard, and startup batch files for terminal environments. |
 | **Standalone Coordinator Executable** | `backend-dist/koth-coordinator.exe` | 17.32 MB | **Central PC** | PyInstaller-compiled coordinator binary. Zero Python installation required. Listens on `0.0.0.0:5000`. |
-| **Standalone Worker Executable** | `agent-worker-dist/koth-agent-worker.exe` | 13.50 MB | **Remote PCs (1–4)** | PyInstaller-compiled agent worker binary. Independent execution runtime. |
-| **Portable Unpacked Desktop App** | `dist-installer/win-unpacked/` | ~280 MB | **Central PC** | Unpacked portable application directory for direct execution without running the installer. |
+| **Standalone Worker Executable** | `agent-worker-dist/koth-agent-worker.exe` | 13.50 MB | **All PCs** | PyInstaller-compiled agent worker binary. Independent execution runtime. |
+| **Portable Unpacked Desktop App** | `dist-installer/win-unpacked/` | ~310 MB | **All PCs** | Unpacked portable application directory for direct execution without running the installer. |
 
 ---
 
-## Quickstart: Central PC & Remote Worker Deployment
+## Quickstart: Unified Desktop Deployment on Every PC
 
 ### Prerequisites
 - **Operating System**: Windows 10 or Windows 11 (64-bit).
-- **Network**: All five PCs connected to the same LAN (Ethernet switch, Wi-Fi router, or mobile hotspot).
+- **Network**: All five PCs connected to the same LAN (Ethernet switch, Wi-Fi router, or event hotspot).
 
 ---
 
-### Step 1: Central Operations PC Setup
+### Step 1: Central Operations PC Setup (Host)
 
 1. **Install KOTH Command**:
    Run `KOTH-Command-Setup.exe` and complete the installation wizard.
-   *(Alternatively, launch `dist-installer/win-unpacked/KOTH Command.exe`)*.
-
-2. **Allow Inbound Port 5000 in Windows Firewall**:
+2. **First-Launch Server Setup**:
+   - When the setup wizard appears, select **Host Server**.
+   - Confirm Service Port: `5000`.
+   - Click **Start Central Server**.
+   - Note the primary LAN IP displayed in the banner (e.g. `192.168.1.50`).
+3. **Allow Inbound Port 5000 in Windows Firewall**:
    Open PowerShell as Administrator on the Central PC and run:
    ```powershell
-   netsh advfirewall firewall add rule name="KOTH Coordinator Server" dir=in action=allow protocol=TCP localport=5000
+   netsh advfirewall firewall add rule name="KOTH Central Coordinator" dir=in action=allow protocol=TCP localport=5000
    ```
-
-3. **Launch KOTH Command**:
-   - The application starts the desktop interface and automatically launches the backend coordinator.
-   - The Central Server LAN Connection Banner displays your active LAN IP (e.g. `http://192.168.1.100:5000`).
+4. **Register Team Squad**:
+   Click **Register 4-Member Team** and create the squad credentials for `alice_leader` (Agent 01), `bob_recon` (Agent 02), `charlie_exploit` (Agent 03), and `diana_defense` (Agent 04).
 
 ---
 
-### Step 2: Remote Agent PCs Setup (PCs 1 through 4)
+### Step 2: Participant Desktop PCs Setup (Teammate PCs 1 through 3)
 
-1. **Distribute Worker Package**:
-   Copy `dist-installer/KOTH-Agent-Worker-v1.0.0-win-x64.zip` to each of the four teammate PCs (via USB drive or network share) and extract it.
-
-2. **Enroll the Agent Worker (One-Time Setup)**:
-   Double-click `enroll_agent.bat` (or open Command Prompt and run):
-   ```cmd
-   koth-agent-worker.exe --enroll
-   ```
-   The interactive setup wizard will prompt for:
-   - **Central Coordinator URL**: Enter `http://<CENTRAL_PC_LAN_IP>:5000` (e.g. `http://192.168.1.100:5000`).
-   - **Team ID**: Enter your registered team identifier (e.g. `null_warriors`).
-   - **Agent ID**: Enter `agent-01`, `agent-02`, `agent-03`, or `agent-04`.
-   - **Agent Token**: Enter the matching high-entropy token issued by the coordinator.
+1. **Install KOTH Command**:
+   Run the exact same `KOTH-Command-Setup.exe` on each teammate laptop.
+2. **Connect to Central Server**:
+   - On first launch, select **Participant Client**.
+   - Enter the Central Server LAN IP (e.g. `192.168.1.50`) and port `5000`.
+   - Click **Test Connection** to verify latency, then click **Connect to Central Server**.
+   - *Note: In Client mode, no local coordinator is started and no local SQLite database is created.*
+3. **Log In with Individual Account**:
+   - PC 2: Log in as `bob_recon` (assigned `agent-02`, Hill 2).
+   - PC 3: Log in as `charlie_exploit` (assigned `agent-03`, Hill 3).
+   - PC 4: Log in as `diana_defense` (assigned `agent-04`, Hill 4).
+4. **Launch Local Agent Worker**:
+   - In the sidebar, navigate to **Agent Monitoring**.
+   - Click the green **Start Local Worker** button on the "Local Agent Worker on this PC" card.
+   - The worker starts in the background, transmits live CPU/RAM metrics, sends heartbeats, and polls for authorized hill tasks!
 
    *The wizard tests network reachability, verifies credentials with the server, and saves the configuration securely to `agent_config.json`.*
 
@@ -269,16 +277,25 @@ The platform includes a comprehensive, automated regression test suite covering 
 .\venv\Scripts\Activate.ps1
 
 # Run verified production test suite
-python -m pytest tests/test_lan_five_pc_deployment.py tests/test_participant_features.py tests/test_agent_llm_config.py -v
+python -m pytest tests/test_full_desktop_client_architecture.py tests/test_lan_five_pc_deployment.py tests/test_participant_features.py tests/test_agent_llm_config.py -v
 ```
 
-### Verified Test Results (34/34 Passing)
+### Verified Test Results (43/43 Passing)
 
 ```text
 ============================= test session starts =============================
-platform win32 -- Python 3.13.7, pytest-8.3.4
-collected 34 items
+platform win32 -- Python 3.13.7, pytest-9.1.1
+collected 43 items
 
+tests/test_full_desktop_client_architecture.py::test_01_central_server_persistence_and_no_client_db PASSED
+tests/test_full_desktop_client_architecture.py::test_02_four_member_squad_registration_and_distinct_logins PASSED
+tests/test_full_desktop_client_architecture.py::test_03_impersonation_rejection_across_participants PASSED
+tests/test_full_desktop_client_architecture.py::test_04_role_based_leader_gates PASSED
+tests/test_full_desktop_client_architecture.py::test_05_shared_workspace_synchronization_across_four_clients PASSED
+tests/test_full_desktop_client_architecture.py::test_06_local_agent_worker_heartbeats_and_telemetry PASSED
+tests/test_full_desktop_client_architecture.py::test_07_cross_client_coordination_messaging PASSED
+tests/test_full_desktop_client_architecture.py::test_08_client_disconnection_and_reconnection_resilience PASSED
+tests/test_full_desktop_client_architecture.py::test_09_coordinator_restart_resilience_with_persistent_sqlite PASSED
 tests/test_lan_five_pc_deployment.py::test_lan_ip_discovery_and_network_info PASSED
 tests/test_lan_five_pc_deployment.py::test_four_member_team_registration PASSED
 tests/test_lan_five_pc_deployment.py::test_agent_enrollment_and_authentication PASSED
@@ -314,7 +331,7 @@ tests/test_agent_llm_config.py::test_agent_llm_config_export_import PASSED
 tests/test_agent_llm_config.py::test_agent_llm_config_concurrent_access PASSED
 tests/test_agent_llm_config.py::test_agent_llm_config_malformed_json PASSED
 
-============================= 34 passed in 17.15s =============================
+============================= 43 passed in 13.56s =============================
 ```
 
 ---
@@ -334,7 +351,7 @@ koth-ai-main/
 ├── desktop/                       # Electron & React 18 Desktop Operations Center
 │   ├── electron/                  # Electron main process & IPC lifecycle management
 │   ├── src/                       # React 18 frontend (Components, Hooks, Services)
-│   │   ├── components/            # Agent Monitoring, Event Feed, Swarm Coordination views
+│   │   ├── components/            # Server Setup, Agent Monitoring, Coordination views
 │   │   ├── services/              # API clients and WebSocket synchronization
 │   │   └── index.css              # Enterprise light theme design tokens
 │   └── package.json               # Desktop dependencies and build scripts
@@ -343,16 +360,17 @@ koth-ai-main/
 ├── agent-worker-dist/             # Compiled Standalone Remote Agent Worker Binary
 │   └── koth-agent-worker.exe      # Standalone PyInstaller agent worker binary (13.50 MB)
 ├── dist-installer/                # Production Distribution Packages
-│   ├── KOTH-Command-Setup.exe     # NSIS Windows Desktop Installer (97.1 MB)
-│   └── KOTH-Agent-Worker-v1.0.0-win-x64.zip # Remote worker distribution archive (13.9 MB)
+│   ├── KOTH-Command-Setup.exe     # Unified Windows Desktop Installer (110.2 MB)
+│   └── KOTH-Agent-Worker-v1.0.0-win-x64.zip # Headless worker distribution archive (13.9 MB)
 ├── scripts/                       # Operational & Administrative Utilities
 │   ├── generate_lan_cert.py       # Root CA & Server TLS Certificate generator for LAN
 │   ├── backup_database.ps1        # Atomic SQLite WAL database backup script
 │   └── package_release.py         # Automated release packager and integrity validator
 ├── tests/                         # Automated Pytest Regression Test Suites
-│   ├── test_lan_five_pc_deployment.py  # 5-PC distributed LAN deployment integration tests
-│   ├── test_participant_features.py    # Monitoring, notifications, and coordination tests
-│   └── test_agent_llm_config.py        # Independent LLM configuration and isolation tests
+│   ├── test_full_desktop_client_architecture.py # Unified desktop multi-client tests
+│   ├── test_lan_five_pc_deployment.py           # 5-PC distributed LAN deployment integration tests
+│   ├── test_participant_features.py             # Monitoring, notifications, and coordination tests
+│   └── test_agent_llm_config.py                 # Independent LLM configuration and isolation tests
 ├── FIVE_PC_LAN_DEPLOYMENT_GUIDE.md# Complete 5-PC deployment guide & network topology
 ├── DEPLOYMENT.md                  # Central server production setup & operations manual
 ├── LAN_AGENT_SETUP.md             # Remote teammate laptop setup & enrollment manual

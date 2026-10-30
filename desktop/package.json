@@ -31,6 +31,10 @@
       {
         "from": "../backend-dist/koth-coordinator.exe",
         "to": "backend/koth-coordinator.exe"
+      },
+      {
+        "from": "../agent-worker-dist/koth-agent-worker.exe",
+        "to": "worker/koth-agent-worker.exe"
       }
     ],
     "win": {

@@ -603,10 +603,11 @@ def interactive_enrollment() -> Dict[str, Any]:
 
 def main():
     parser = argparse.ArgumentParser(description="KOTH Command — Remote Agent Worker")
-    parser.add_argument("--coordinator-url", help="Central coordinator URL (e.g. http://192.168.1.50:5000)")
-    parser.add_argument("--agent-id", choices=["agent-01", "agent-02", "agent-03", "agent-04"], help="Agent seat ID")
-    parser.add_argument("--team-id", default="null_warriors", help="Team ID")
+    parser.add_argument("--coordinator-url", "--server", dest="coordinator_url", help="Central coordinator URL (e.g. http://192.168.1.50:5000)")
+    parser.add_argument("--agent-id", "--agent", dest="agent_id", choices=["agent-01", "agent-02", "agent-03", "agent-04"], help="Agent seat ID")
+    parser.add_argument("--team-id", "--team", dest="team_id", default="null_warriors", help="Team ID")
     parser.add_argument("--token", help="Independent agent secret token or session token")
+    parser.add_argument("--session-token", help="Direct session token for authenticated participant")
     parser.add_argument("--username", help="Username for member login")
     parser.add_argument("--password", help="Password for member login")
     parser.add_argument("--ca-cert", help="Path to CA certificate for TLS verification")
@@ -632,15 +633,16 @@ def main():
     coord_url = args.coordinator_url or config_data.get("coordinator_url", "http://127.0.0.1:5000")
     agent_id = args.agent_id or config_data.get("agent_id", "agent-02")
     team_id = args.team_id or config_data.get("team_id", "null_warriors")
-    token = args.token or config_data.get("agent_token") or config_data.get("session_token")
+    sess_tok = args.session_token or config_data.get("session_token")
+    token = args.token or config_data.get("agent_token") or sess_tok
     ca_cert = args.ca_cert or config_data.get("ca_cert")
 
     worker = RemoteAgentWorker(
         coordinator_url=coord_url,
         agent_id=agent_id,
         team_id=team_id,
-        agent_token=token if not config_data.get("session_token") else None,
-        session_token=config_data.get("session_token"),
+        agent_token=token if not sess_tok else None,
+        session_token=sess_tok or (token if token and len(token) > 20 else None),
         ca_cert=ca_cert,
     )
 

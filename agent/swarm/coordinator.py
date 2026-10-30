@@ -586,8 +586,11 @@ class SwarmCoordinator:
 
                 # Real metrics from heartbeat metadata (None if not provided - NO FABRICATION)
                 meta = hb.metadata if hb else {}
-                cpu_pct = meta.get("cpu_percent") if "cpu_percent" in meta else None
-                mem_mb = meta.get("memory_mb") if "memory_mb" in meta else None
+                tel = meta.get("telemetry") if isinstance(meta.get("telemetry"), dict) else {}
+                cpu_pct = meta.get("cpu_percent") or tel.get("cpu_percent")
+                mem_pct = meta.get("memory_percent") or tel.get("memory_percent")
+                mem_mb = meta.get("memory_mb") or tel.get("memory_used_mb")
+                telemetry_dict = tel if tel else {"cpu_percent": cpu_pct, "memory_percent": mem_pct, "memory_mb": mem_mb}
 
                 # LLM config status
                 llm_cfg = self.llm_config_manager.get_config(aid)
@@ -640,7 +643,9 @@ class SwarmCoordinator:
                     "assigned_hill": assigned_hill,
                     "scope": f"Hill {assigned_hill} Target Scope",
                     "cpu_percent": cpu_pct,
+                    "memory_percent": mem_pct,
                     "memory_mb": mem_mb,
+                    "telemetry": telemetry_dict,
                     "last_heartbeat": last_time,
                     "heartbeat_age_seconds": round(now - last_time, 1) if last_time else None,
                     "llm_status": llm_summary,
@@ -691,6 +696,7 @@ def create_coordinator_blueprint(coordinator: SwarmCoordinator):
             "/api/swarm/healthz",
             "/api/swarm/network-info",
             "/api/team/register",
+            "/api/team/register-four",
             "/api/team/create",
             "/api/team/login",
             "/api/team/join",
@@ -1063,6 +1069,9 @@ def create_coordinator_blueprint(coordinator: SwarmCoordinator):
                     "message": f"Agent ID mismatch with session: authenticated as '{g.get('authenticated_agent_id')}'",
                 }), 403
             data["agent_id"] = g.get("authenticated_agent_id")
+        data.setdefault("team_id", coordinator.team_id)
+        if "telemetry" in data:
+            data.setdefault("metadata", {})["telemetry"] = data["telemetry"]
         hb = AgentHeartbeat.from_dict(data)
         res = coordinator.record_heartbeat(hb)
         return jsonify(res)
@@ -1444,7 +1453,16 @@ def create_coordinator_blueprint(coordinator: SwarmCoordinator):
     @bp.route("/api/coordination/messages", methods=["POST"])
     def post_coordination_message_endpoint():
         data = request.get_json(force=True) or {}
-        caller_agent_id = g.get("authenticated_agent_id") or data.get("from_agent_id") or "agent-01"
+        auth_aid = g.get("authenticated_agent_id")
+        provided_aid = data.get("from_agent_id")
+
+        if auth_aid and provided_aid and provided_aid != auth_aid and auth_aid != "operator":
+            return jsonify({
+                "error": "Forbidden",
+                "message": f"Sender impersonation rejected: authenticated session is bound to '{auth_aid}', cannot send as '{provided_aid}'",
+            }), 403
+
+        caller_agent_id = auth_aid or provided_aid or "agent-01"
         to_agent_id = data.get("to_agent_id", "ALL")
         msg_type = data.get("message_type", "STATUS_UPDATE")
         content = data.get("content", "").strip()
@@ -1561,6 +1579,7 @@ def create_coordinator_blueprint(coordinator: SwarmCoordinator):
     # Team Management Routes (PBKDF2 Authentication & 4-Agent Portals)
     # =========================================================================
     @bp.route("/api/team/register", methods=["POST"])
+    @bp.route("/api/team/register-four", methods=["POST"])
     def team_register_endpoint():
         data = request.get_json(force=True) or {}
         try:

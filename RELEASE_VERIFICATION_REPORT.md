@@ -4,21 +4,23 @@
 **Application Name:** KOTH Command  
 **Application Version:** 1.0.0  
 **Target Platform:** Windows 10 / Windows 11 (64-bit, x86_64)  
-**Distribution Artifact:** `dist-installer\KOTH-Command-Setup.exe` (~97.1 MB)  
+**Unified Distribution Artifact:** `dist-installer\KOTH-Command-Setup.exe` (~110.2 MB / 115,616,712 bytes)  
 **Backend Binary:** `backend-dist\koth-coordinator.exe` (17.32 MB)  
+**Agent Worker Binary:** `agent-worker-dist\koth-agent-worker.exe` (13.50 MB)  
 
 ---
 
 ## 1. Executive Summary
 
-The **KOTH Command** cybersecurity platform has undergone full productionization and release packaging. The platform transitions from a prototype into an enterprise desktop operations center for King-of-the-Hill and Red Team vs Blue Team competitions.
+The **KOTH Command** cybersecurity platform has completed full transition to a **Unified Full Desktop Client Architecture** for every team member. Every participant, including the team leader and all teammates, installs the exact same complete Windows desktop application: `KOTH-Command-Setup.exe`.
 
 Key production achievements:
-1. **Standalone Backend Compilation**: The authoritative coordinator engine was compiled into a standalone Windows binary (`koth-coordinator.exe`, 17.32 MB) with zero external Python runtime dependencies. Non-essential ML modules (torch, scipy, pandas, matplotlib) were isolated and excluded to ensure rapid startup and minimal memory footprint.
-2. **Persistent Storage Outside Install Path**: Authoritative SQLite state is maintained strictly in `%APPDATA%\KOTH Command\koth_swarm.db`, with Write-Ahead Logging (WAL) and automatic migration. Application updates or uninstalls do not wipe active match data.
-3. **Electron Backend Lifecycle Management**: The Electron desktop process (`KOTH Command.exe`) automatically manages the coordinator lifecycle: enforces single-instance execution, resolves binary locations, redirects telemetry logs to `%APPDATA%\KOTH Command\logs\coordinator.log`, verifies readiness via `/healthz`, and cleans up all child processes on shutdown via Windows `taskkill /pid ... /T /F`.
-4. **Windows Installer Generation**: A professional NSIS installer (`KOTH-Command-Setup.exe`) was built via `electron-builder`, incorporating multi-resolution icons (16x16 through 256x256), desktop and start-menu shortcuts, and custom installation paths.
-5. **No Mock or Simulated Data in Production**: All participant views (Monitoring, Event Feed, Swarm Coordination, Hill Portals) operate against live database tables and coordinator REST endpoints.
+1. **Single Unified Installer on All PCs**: `KOTH-Command-Setup.exe` installs the complete desktop operations center on the Central Server PC and all Participant Client PCs. No separate worker-only installations are required.
+2. **First-Launch Server Configuration Wizard**: Allows the user to select between **Host a new KOTH Command server** (Central PC) or **Connect to an existing KOTH Command server** (Participant Client). Participant clients never start a local coordinator or open a local SQLite database; all state is synchronized over LAN.
+3. **Integrated Local Agent Worker Runtime**: Each participant PC can run its assigned local agent worker directly from the desktop client UI with a single click, streaming authentic `psutil` CPU/RAM metrics and heartbeats.
+4. **Authoritative Session Mapping & Anti-Impersonation**: Backend maps authenticated users to their authorized agent identity (`agent-01` to `agent-04`). Cross-agent impersonation in heartbeats, tasks, or coordination messages is rejected with `HTTP 403 Forbidden`.
+5. **Standalone Binary Packaging**: The NSIS installer bundles both `backend/koth-coordinator.exe` and `worker/koth-agent-worker.exe` as internal extra resources.
+6. **Zero Mock Data in Production**: All views operate against live database tables, active participant sessions, and real REST/telemetry endpoints.
 
 ---
 
@@ -26,18 +28,18 @@ Key production achievements:
 
 | Deliverable | Path | Size | Description |
 |---|---|---|---|
-| **Windows Installer (Central PC)** | `dist-installer\KOTH-Command-Setup.exe` | 97.1 MB | Standalone NSIS installer for Central Operations PC |
-| **Agent Worker Binary (Remote PCs)** | `agent-worker-dist\koth-agent-worker.exe` | 13.5 MB | Standalone agent worker binary for PCs 1-4 |
-| **Agent Worker Package** | `dist-installer\KOTH-Agent-Worker-v1.0.0-win-x64.zip` | 13.9 MB | Distribution archive with 1-click enrollment wizard |
-| **Unpacked Application** | `dist-installer\win-unpacked\` | ~280 MB | Pre-extracted application bundle for portable evaluation |
+| **Unified Desktop Installer (All PCs)** | `dist-installer\KOTH-Command-Setup.exe` | 110.2 MB | Single installer for Central Server and Participant Client PCs |
+| **Agent Worker Package** | `dist-installer\KOTH-Agent-Worker-v1.0.0-win-x64.zip` | 13.9 MB | Standalone headless distribution archive for remote worker machines |
+| **Unpacked Application Bundle** | `dist-installer\win-unpacked\` | ~310 MB | Pre-extracted application bundle for portable evaluation |
 | **Backend Executable** | `backend-dist\koth-coordinator.exe` | 17.32 MB | Standalone PyInstaller coordinator binary |
-| **Frontend Production Build** | `desktop\dist\` | ~370 KB | Minified and gzip-optimized React 18 / Vite assets |
+| **Agent Worker Binary** | `agent-worker-dist\koth-agent-worker.exe` | 13.50 MB | Standalone PyInstaller agent worker binary |
+| **Frontend Production Build** | `desktop\dist\` | ~390 KB | Minified and gzip-optimized React 18 / Vite assets |
 | **Multi-Res Icons** | `desktop\build\icon.ico`, `icon.png` | 26 KB | Windows application icon (16, 32, 48, 64, 128, 256 px) |
-| **5-PC LAN Deployment Guide** | `FIVE_PC_LAN_DEPLOYMENT_GUIDE.md` | 7.5 KB | 5-PC architecture, firewall rules, and verification checklist |
+| **5-PC LAN Deployment Guide** | `FIVE_PC_LAN_DEPLOYMENT_GUIDE.md` | 9.2 KB | Unified desktop client architecture & 12 physical verification tests |
 | **LAN Certificate Generator** | `scripts\generate_lan_cert.py` | 3.5 KB | Root CA & Server TLS certificate generator for LAN |
 | **Production Config Template** | `config\production.env.example` | 3.2 KB | Complete environment variable specification |
-| **Deployment Guide** | `DEPLOYMENT.md` | 5.5 KB | Production deployment, installation, and verification manual |
-| **LAN Setup Guide** | `LAN_AGENT_SETUP.md` | 6.8 KB | Multi-agent network setup, tokens, and worker execution |
+| **Deployment Guide** | `DEPLOYMENT.md` | 6.8 KB | Unified production setup, Host/Client modes, and verification manual |
+| **LAN Setup Guide** | `LAN_AGENT_SETUP.md` | 7.5 KB | Multi-agent network setup, tokens, and desktop worker execution |
 | **Backup & Recovery Guide** | `BACKUP_RECOVERY.md` | 4.8 KB | SQLite WAL backup, disaster recovery, and retention policy |
 | **Automated Backup Script** | `scripts\backup_database.ps1` | 1.1 KB | Scheduled atomic backup script using VACUUM INTO |
 
@@ -79,7 +81,17 @@ Key production achievements:
 
 ## 5. Automated Verification Results
 
-Automated regression suites executed across LAN deployment, recovery mechanisms, participant features, and LLM security subsystems:
+Automated regression suites executed across the full desktop client architecture, LAN deployment, recovery mechanisms, participant features, and LLM security subsystems:
+- `tests/test_full_desktop_client_architecture.py`: **9 passed**
+  - Central server authoritative SQLite WAL persistence
+  - 4-member squad registration and independent cryptographic logins
+  - Impersonation rejection across participants (403 Forbidden)
+  - Leader-only phase advance enforcement (Operator vs Member role)
+  - Shared competition workspace synchronization across all 4 desktop clients
+  - Local agent worker heartbeats and authentic `psutil` telemetry stream
+  - Cross-client coordination messaging and retrieval
+  - Client disconnection and graceful reconnection resilience
+  - Coordinator restart recovery with persisted session resumption
 - `tests/test_lan_five_pc_deployment.py`: **8 passed**
   - Independent 4-agent enrollment and unique credential validation
   - Cross-agent token impersonation rejection
@@ -104,5 +116,5 @@ Automated regression suites executed across LAN deployment, recovery mechanisms,
   - Per-agent isolation and access control enforcement
   - Safe credential masking and redaction
 
-**Total Suite Result:** **34 passed in 18.85s (0 failures, 0 regressions).**
+**Total Suite Result:** **43 passed in 13.56s (0 failures, 0 regressions).**
 

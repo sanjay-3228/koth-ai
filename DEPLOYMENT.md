@@ -43,60 +43,60 @@ The platform consists of two integrated components:
 ### Installation Layout on Windows
 - **Application Binaries**:
   `%LOCALAPPDATA%\Programs\koth-command\`
-  - `KOTH Command.exe`: Main Electron launcher.
-  - `resources\backend\koth-coordinator.exe`: Packaged coordinator engine.
+  - `KOTH Command.exe`: Main Electron desktop launcher.
+  - `resources\backend\koth-coordinator.exe`: Packaged coordinator engine (only executed when configured as Host).
+  - `resources\worker\koth-agent-worker.exe`: Packaged agent worker runtime (spawned when local worker is started).
   - `resources\app.asar`: Packaged React frontend assets.
-- **Persistent Storage (User Data)**:
+- **Client Configuration**:
+  `%APPDATA%\KOTH Command\client_config.json`: Stores whether the machine is Host or Client, target server LAN IP, port, and TLS preferences.
+- **Persistent Storage (Host Only)**:
   `%APPDATA%\KOTH Command\`
   - `koth_swarm.db`: Authoritative SQLite database (persists across application updates).
   - `koth_swarm.db-wal` / `koth_swarm.db-shm`: SQLite Write-Ahead Log files.
 - **Runtime Logs**:
   `%APPDATA%\KOTH Command\logs\`
-  - `coordinator.log`: Output from the authoritative coordinator engine.
+  - `coordinator.log`: Output from the authoritative coordinator engine (Host mode).
+  - `local_worker_<agent_id>.log`: Output from the integrated local agent worker.
 
 ---
 
-## 4. Starting the Application
+## 4. First-Launch Configuration: Host vs Client Mode
 
-### Automatic Standalone Mode (Single Operator Machine)
-Launch `KOTH Command` from the desktop shortcut or Start Menu.
-1. The Electron host checks whether port 5000 is already active.
-2. If inactive, Electron automatically launches `resources\backend\koth-coordinator.exe` with:
-   - `--port 5000`
-   - `--host 0.0.0.0`
-   - `--db-path "%APPDATA%\KOTH Command\koth_swarm.db"`
-   - `--profile LOCAL_REHEARSAL`
-3. Electron polls `http://127.0.0.1:5000/healthz` until healthy (under 2 seconds).
-4. The Operations Center opens directly to the Competition Launcher or Participant Workspace.
-5. On window close, Electron automatically terminates the coordinator process tree, preventing orphaned background tasks.
+On first launch, the desktop application displays the **Central Server Setup Wizard**:
 
-### Dedicated Server Mode (Team LAN Coordinator)
-In a team competition where one machine acts as the dedicated coordinator and other team members connect from their own laptops:
+### Mode 1: Host Central Server (Designated Central PC)
+- Select **Host Server**.
+- The Electron main process launches the bundled `koth-coordinator.exe` bound to `0.0.0.0:5000` with the central SQLite database.
+- The UI displays the Central PC's detected LAN IP (e.g. `192.168.1.50`).
+- Teammate desktop clients across the LAN connect to this address.
 
-1. Open PowerShell on the host machine as Administrator.
-2. Run the standalone coordinator directly:
-   ```powershell
-   & "C:\Program Files\KOTH Command\resources\backend\koth-coordinator.exe" `
-       --host 0.0.0.0 `
-       --port 5000 `
-       --profile LAN_REHEARSAL `
-       --auth-token "YourSharedTeamToken123!" `
-       --operator-token "YourOperatorAdminToken123!" `
-       --db-path "C:\ProgramData\KOTH Command\koth_swarm.db"
-   ```
-3. Open Windows Firewall for LAN inbound access:
-   ```powershell
-   New-NetFirewallRule -DisplayName "KOTH Swarm Coordinator" `
-       -Direction Inbound `
-       -LocalPort 5000 `
-       -Protocol TCP `
-       -Action Allow
-   ```
-4. Client laptops can now run the KOTH Command desktop app pointing to `http://<SERVER_IP>:5000` or run their agent workers remotely.
+### Mode 2: Connect to Central Server (Participant Desktop Client PCs)
+- Select **Participant Client**.
+- Enter:
+  - **Server Hostname or LAN IP**: (e.g. `192.168.1.50`).
+  - **Service Port**: `5000`.
+  - **Protocol**: `HTTP` or `HTTPS`.
+  - **Trust LAN SSL**: Checked for local competition networks.
+- Click **Test Connection** to verify latency.
+- Click **Connect to Central Server**.
+- **Important**: In Client mode, the local coordinator is NEVER started and no local SQLite database is created. All operations synchronize directly with the Central PC.
 
 ---
 
-## 5. Post-Deployment Verification Checklist
+## 5. Local Agent Worker Execution within Desktop Client
+
+Once logged in as an authorized squad member (`alice_leader`, `bob_recon`, `charlie_exploit`, `diana_defense`):
+1. Navigate to **Agent Monitoring** in the left sidebar.
+2. The top card displays: **Local Agent Worker on this PC: `agent-XX` (Hill X)**.
+3. Click **Start Local Worker**:
+   - Electron spawns `resources\worker\koth-agent-worker.exe` with your authenticated session token.
+   - The worker automatically collects local hardware telemetry (`psutil` CPU% and RAM%) and begins sending real heartbeats every 3-5 seconds.
+   - The agent node in the central swarm grid transitions to `ONLINE / IDLE`.
+4. Click **Stop Local Worker** to halt the worker subprocess at any time.
+
+---
+
+## 6. Post-Deployment Verification Checklist
 
 Verify each of the following tests immediately after installation:
 

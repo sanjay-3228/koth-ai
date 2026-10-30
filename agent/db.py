@@ -31,6 +31,7 @@ class DatabaseManager:
         """Create necessary tables and indices if they do not exist."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA journal_mode = WAL")
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS telemetry_history (
